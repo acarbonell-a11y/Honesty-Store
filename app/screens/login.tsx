@@ -1,12 +1,23 @@
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
-import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
-import images from "../constant/images";
+import { Alert, Image, Pressable, Text, TextInput, TouchableOpacity, View } from "react-native";
+import images from "../../constant/images";
+import { onLogin } from "../functions/authFunctions";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const router = useRouter();
+//handles the login button
+const handleLogin = async () => {
+    const success = await onLogin(email, password);
+    if (success) {
+      Alert.alert("Success", "Welcome back!");
+      router.replace("/screens/homepage"); // 👈 after login, go to home screen
+    } else {
+      Alert.alert("Error", "Invalid email or password");
+    }
+  };
 
   return (
     <View className="flex-1 bg-dark px-6 justify-center">
@@ -50,13 +61,29 @@ export default function LoginScreen() {
         className="bg-gray-800 text-white px-4 py-4 rounded-2xl mb-6"
       />
 
-      {/* Button */}
-      <TouchableOpacity className="py-4 rounded-2xl bg-pink-500">
-        <Text className="text-white text-lg font-semibold text-center">SIGN IN</Text>
-      </TouchableOpacity>
+      {/* Pressable {Custom-button} */}
+      <Pressable
+        onPress={handleLogin}
+        style={{
+          paddingVertical: 16,
+          borderRadius: 16,
+          backgroundColor: "#ffffffff", // pink-500
+        }}
+      >
+        <Text
+          style={{
+            color: "black",
+            fontSize: 18,
+            fontWeight: "600",
+            textAlign: "center",
+          }}
+        >
+          SIGN IN
+        </Text>
+      </Pressable>
 
       {/* Link to signup */}
-      <Link href="/signup" asChild>
+      <Link href="/screens/signup" asChild>
         <TouchableOpacity className="mt-6">
           <Text className="text-gray-400 text-center">
             Don’t have an account? <Text className="text-pink-500">Sign up</Text>

@@ -17,13 +17,13 @@ export default function WelcomeScreen() {
         Started!
       </Text>
 
-      <Link href="/login" asChild>
+      <Link href="/screens/login" asChild>
         <TouchableOpacity className="px-24 py-4 rounded-2xl bg-pink-500">
           <Text className="text-white text-lg font-semibold">SIGN IN</Text>
         </TouchableOpacity>
       </Link>
 
-      <Link href="/signup" asChild>
+      <Link href="/screens/signup" asChild>
         <TouchableOpacity className="absolute bottom-10">
           <Text className="text-gray-400">
             Didn’t have account?{" "}

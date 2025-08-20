@@ -1,7 +1,8 @@
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
-import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
-import images from "../constant/images";
+import { Image, Pressable, Text, TextInput, TouchableOpacity, View } from "react-native";
+import images from "../../constant/images";
+import { onSignUp } from "../functions/authFunctions";
 
 export default function SignupScreen() {
   const [username, setUsername] = useState("");
@@ -9,6 +10,13 @@ export default function SignupScreen() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const router = useRouter();
+
+  const handlePress = async () => {
+    const success = await onSignUp(email, password, confirm, username);
+    if (success) {
+      router.replace("/screens/login"); // 👈 navigation only here, inside screen
+    }
+  };
 
   return (
     <View className="flex-1 bg-dark px-6 justify-center">
@@ -65,12 +73,20 @@ export default function SignupScreen() {
         secureTextEntry
         className="bg-gray-800 text-white px-4 py-4 rounded-2xl mb-6"
       />
+      <Pressable 
+        onPress={handlePress} 
+        style={{
+          paddingVertical: 16,
+          borderRadius: 16,
+          backgroundColor: "#ffffffff", // Tailwind pink-500,
+        }}
+        >
+          <Text style={{ color: "black", fontSize: 18, fontWeight: "600", textAlign: "center" }}>
+            SIGN UP
+          </Text>
+      </Pressable>
 
-      <TouchableOpacity className="py-4 rounded-2xl bg-pink-500">
-        <Text className="text-white text-lg font-semibold text-center">SIGN UP</Text>
-      </TouchableOpacity>
-
-      <Link href="/login" asChild>
+      <Link href="/screens/login" asChild>
         <TouchableOpacity className="mt-6">
           <Text className="text-gray-400 text-center">
             Already have an account? <Text className="text-pink-500">Sign in</Text>
