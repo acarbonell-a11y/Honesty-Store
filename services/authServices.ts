@@ -1,13 +1,13 @@
 // app/services/authService.ts
 import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  UserCredential
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    UserCredential
 } from "firebase/auth";
 import { auth } from "../config/firebaseConfig";
 
 
-//this is a appplication to firebase signup function
+//this is a appplication to firebase signup function for authentication
 export const signUpUser = async (email: string, password: string): Promise<UserCredential> => {
   return await createUserWithEmailAndPassword(auth, email, password);
 };

@@ -3,20 +3,26 @@
     "name": "honesty-store",
     "slug": "honesty-store",
     "version": "1.0.0",
+    "owner": "expomaglunsod",
     "orientation": "portrait",
-    "icon": "../assets/images/arrow.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "honestystore",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.expomaglunsod.honestystore",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.expomaglunsod.honestystore"
     },
     "web": {
       "bundler": "metro",
@@ -33,10 +39,27 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
+      ],
+      "expo-web-browser",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme":"com.googleusercontent.apps.688642102325-i2hfo5plhgq0ad5ieuva90epltghq5dc"
+          
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "expoClientId": "688642102325-8ggre5ts31ic8kejd41d0svq65k76l89.apps.googleusercontent.com",
+      "iosClientId": "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com",
+      "androidClientId": "688642102325-38pe79m1ufdtsleqjs8deeo7oule0atl.apps.googleusercontent.com",
+      "router": {},
+      "eas": {
+        "projectId": "54d938f4-81d4-4ce0-9273-ea9e9f938ee6"
+      }
     }
   }
 }

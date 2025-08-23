@@ -1,7 +1,7 @@
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword } from "firebase/auth"; //imports the handler for signing in.
 import { Alert } from "react-native";
 import { auth } from "../config/firebaseConfig";
-import { handleSignUp } from "./firebaseFunctions"; // your firebase wrapper
+import { handleSignUp } from "./firebaseFunctions"; // the firebase wrapper 
 
 //Sign-up Function
 export const onSignUp = async (

@@ -5,7 +5,7 @@ here includes the attributes of your Firebase Database to be accessed by the App
 
 // firebaseConfig.js
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 //Input here the Firebase details (check the database you created on firebase):
@@ -25,3 +25,5 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 //this is for the Database
 export const db = getFirestore(app);
+//for google sign in
+export const googleProvider = new GoogleAuthProvider();

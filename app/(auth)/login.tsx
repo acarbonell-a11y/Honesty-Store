@@ -1,37 +1,38 @@
+// ... your imports remain unchanged
+import { onLogin } from "@/functions/authFunctions";
+import useGoogleAuth from "@/functions/googleSignIn";
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, Image, Pressable, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, Button, Image, Pressable, Text, TextInput, TouchableOpacity, View } from "react-native";
 import images from "../../constant/images";
-import { onLogin } from "../functions/authFunctions";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const router = useRouter();
-//handles the login button
-const handleLogin = async () => {
+
+  // Handles normal email/password login
+  const handleLogin = async () => {
     const success = await onLogin(email, password);
     if (success) {
       Alert.alert("Success", "Welcome back!");
-      router.replace("/screens/homepage"); // 👈 after login, go to home screen
+      router.replace("/(main)/homepage"); // 👈 after login, go to home screen
     } else {
       Alert.alert("Error", "Invalid email or password");
     }
   };
-
+  //Google Sign-in Hook:
+  const { request, promptAsync } = useGoogleAuth();
+  
   return (
     <View className="flex-1 bg-dark px-6 justify-center">
       {/* Header */}
       <View className="absolute top-16 left-0 right-0 px-6">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity onPress={() => router.back()}>
-            <Image
-              source={images.arrow}
-              className="w-6 h-6"
-              resizeMode="contain"
-            />
+            <Image source={images.arrow} className="w-6 h-6" resizeMode="contain" />
           </TouchableOpacity>
-          
+
           <Text className="text-white text-3xl font-extrabold flex-1 text-center">
             Shopnesty
           </Text>
@@ -61,29 +62,27 @@ const handleLogin = async () => {
         className="bg-gray-800 text-white px-4 py-4 rounded-2xl mb-6"
       />
 
-      {/* Pressable {Custom-button} */}
+      {/* Email/Password Login */}
       <Pressable
         onPress={handleLogin}
-        style={{
-          paddingVertical: 16,
-          borderRadius: 16,
-          backgroundColor: "#ffffffff", // pink-500
-        }}
+        style={{ paddingVertical: 16, borderRadius: 16, backgroundColor: "#ffffffff" }}
       >
-        <Text
-          style={{
-            color: "black",
-            fontSize: 18,
-            fontWeight: "600",
-            textAlign: "center",
-          }}
-        >
+        <Text style={{ color: "black", fontSize: 18, fontWeight: "600", textAlign: "center" }}>
           SIGN IN
         </Text>
       </Pressable>
 
+      {/*Google Sign-in*/}
+      <View style={{ marginTop: 20 }}>
+  <Button
+    title="Sign in with Google"
+    disabled={!request}
+    onPress={() => promptAsync()}
+  />
+</View>
+
       {/* Link to signup */}
-      <Link href="/screens/signup" asChild>
+      <Link href="/(auth)/signup" asChild>
         <TouchableOpacity className="mt-6">
           <Text className="text-gray-400 text-center">
             Don’t have an account? <Text className="text-pink-500">Sign up</Text>

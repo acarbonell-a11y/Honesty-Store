@@ -1,10 +1,7 @@
-import { Link, useRouter } from "expo-router";
+import { Link } from "expo-router";
 import { Text, TouchableOpacity, View } from "react-native";
 
-
 export default function WelcomeScreen() {
-  const router = useRouter(); // ✅ hook from expo-router
-
   return (
     <View className="flex-1 bg-dark items-center justify-center px-6">
       {/* App Name on top */}
@@ -17,13 +14,15 @@ export default function WelcomeScreen() {
         Started!
       </Text>
 
-      <Link href="/screens/login" asChild>
+      {/* ✅ Go to login */}
+      <Link href="/(auth)/login" asChild>
         <TouchableOpacity className="px-24 py-4 rounded-2xl bg-pink-500">
           <Text className="text-white text-lg font-semibold">SIGN IN</Text>
         </TouchableOpacity>
       </Link>
 
-      <Link href="/screens/signup" asChild>
+      {/* ✅ Go to signup */}
+      <Link href="/(auth)/signup" asChild>
         <TouchableOpacity className="absolute bottom-10">
           <Text className="text-gray-400">
             Didn’t have account?{" "}

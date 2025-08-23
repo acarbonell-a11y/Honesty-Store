@@ -1,8 +1,8 @@
+import { onSignUp } from "@/functions/authFunctions";
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import { Image, Pressable, Text, TextInput, TouchableOpacity, View } from "react-native";
 import images from "../../constant/images";
-import { onSignUp } from "../functions/authFunctions";
 
 export default function SignupScreen() {
   const [username, setUsername] = useState("");
@@ -11,10 +11,11 @@ export default function SignupScreen() {
   const [confirm, setConfirm] = useState("");
   const router = useRouter();
 
+  //Handles the Pressing of button (Sign up button)
   const handlePress = async () => {
     const success = await onSignUp(email, password, confirm, username);
     if (success) {
-      router.replace("/screens/login"); // 👈 navigation only here, inside screen
+      router.replace("/(auth)/login"); // 👈 navigation only here, inside screen
     }
   };
 
@@ -86,7 +87,7 @@ export default function SignupScreen() {
           </Text>
       </Pressable>
 
-      <Link href="/screens/login" asChild>
+      <Link href="/(auth)/login" asChild>
         <TouchableOpacity className="mt-6">
           <Text className="text-gray-400 text-center">
             Already have an account? <Text className="text-pink-500">Sign in</Text>
