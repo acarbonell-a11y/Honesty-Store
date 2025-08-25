@@ -6,9 +6,9 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        dark: "#0A0018",
+        dark: "#999999ff",
         pink: {
-          500: "#C715FF",
+          500: "#007506ff",
         },
       },
     },

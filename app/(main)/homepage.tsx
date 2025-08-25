@@ -1,10 +1,8 @@
 // WelcomeScreen.tsx
 
-import * as AuthSession from "expo-auth-session";
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-console.log(AuthSession.makeRedirectUri({ useProxy: true }));
 /**
  * A simple welcome screen component for an Expo app.
  * It displays a centered "Welcome" message.

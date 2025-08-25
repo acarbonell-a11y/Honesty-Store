@@ -31,6 +31,7 @@
     },
     "plugins": [
       "expo-router",
+      "@react-native-google-signin/google-signin",
       [
         "expo-splash-screen",
         {
@@ -53,9 +54,13 @@
       "typedRoutes": true
     },
     "extra": {
+      "google":
+      {
       "expoClientId": "688642102325-8ggre5ts31ic8kejd41d0svq65k76l89.apps.googleusercontent.com",
+      "clientId": "688642102325-8ggre5ts31ic8kejd41d0svq65k76l89.apps.googleusercontent.com",
       "iosClientId": "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com",
-      "androidClientId": "688642102325-38pe79m1ufdtsleqjs8deeo7oule0atl.apps.googleusercontent.com",
+      "androidClientId": "688642102325-38pe79m1ufdtsleqjs8deeo7oule0atl.apps.googleusercontent.com"
+      },
       "router": {},
       "eas": {
         "projectId": "54d938f4-81d4-4ce0-9273-ea9e9f938ee6"

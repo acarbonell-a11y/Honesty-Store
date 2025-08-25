@@ -1,3 +1,4 @@
+import { getUserProfile } from "@/services/userServices";
 import { signInWithEmailAndPassword } from "firebase/auth"; //imports the handler for signing in.
 import { Alert } from "react-native";
 import { auth } from "../config/firebaseConfig";
@@ -29,12 +30,23 @@ export const onSignUp = async (
 export const onLogin = async (
   email: string,
   password: string
-): Promise<boolean> => {
+): Promise<any | null> => {
   try {
-    await signInWithEmailAndPassword(auth, email, password);
-    return true; // success
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const uid = userCredential.user.uid;
+
+    // Fetch profile from Firestore
+    const profile = await getUserProfile(uid);
+
+    if (!profile) return null; // No profile found
+
+    return {
+      uid,
+      email: userCredential.user.email,
+      ...profile, // includes isAdmin
+    };
   } catch (error: any) {
     console.error("Login error:", error.message);
-    return false; // failure
+    return null;
   }
 };

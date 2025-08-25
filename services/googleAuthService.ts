@@ -1,14 +1,26 @@
 // googleAuthService.ts
 import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";
-import { auth } from "../config/firebaseConfig";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { auth, db } from "../config/firebaseConfig";
 
-export const firebaseGoogleLogin = async (id_token: string) => {
-  try {
-    const credential = GoogleAuthProvider.credential(id_token);
-    const userCredential = await signInWithCredential(auth, credential);
-    return userCredential.user; // Firebase user object
-  } catch (error) {
-    console.error("Google login error:", error);
-    throw error; // so the caller knows login failed
+// Handles Firebase login with Google
+export const firebaseGoogleLogin = async (idToken: string) => {
+  const credential = GoogleAuthProvider.credential(idToken);
+  const userCredential = await signInWithCredential(auth, credential);
+  const user = userCredential.user;
+
+  const userRef = doc(db, "users", user.uid);
+  const docSnap = await getDoc(userRef);
+
+  if (!docSnap.exists()) {
+    // If user doc does not exist, create one with your schema
+    await setDoc(userRef, {
+      name: user.displayName || "",
+      email: user.email,
+      isAdmin: false, // default
+      createdAt: serverTimestamp(), // Firestore server time
+    });
   }
+
+  return user;
 };

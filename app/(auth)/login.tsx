@@ -1,8 +1,8 @@
 // ... your imports remain unchanged
 import { onLogin } from "@/functions/authFunctions";
-import useGoogleAuth from "@/functions/googleSignIn";
+import useGoogleAuthAlpha from "@/functions/useGoogleAuth";
 import { Link, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Button, Image, Pressable, Text, TextInput, TouchableOpacity, View } from "react-native";
 import images from "../../constant/images";
 
@@ -11,18 +11,30 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const router = useRouter();
 
-  // Handles normal email/password login
   const handleLogin = async () => {
-    const success = await onLogin(email, password);
-    if (success) {
-      Alert.alert("Success", "Welcome back!");
-      router.replace("/(main)/homepage"); // 👈 after login, go to home screen
+  const user = await onLogin(email, password);
+  if (user) {
+    if (user.isAdmin) {
+      Alert.alert("Admin Login", "Welcome back, Admin!");
+      router.replace("./dashboard"); // 👈 admin route
     } else {
-      Alert.alert("Error", "Invalid email or password");
+      Alert.alert("Success", "Welcome back!");
+      router.replace("/(main)/homepage");
     }
-  };
+  } else {
+    Alert.alert("Error", "Invalid email or password");
+  }
+};
+
   //Google Sign-in Hook:
-  const { request, promptAsync } = useGoogleAuth();
+  const { request, promptAsync, response } = useGoogleAuthAlpha();
+  useEffect(() => {
+    if(response?.type === 'success')
+    {
+      console.log("Signed in, navigating to homepage...");
+      router.replace("/(main)/homepage");
+    }
+  },[response,router]);
   
   return (
     <View className="flex-1 bg-dark px-6 justify-center">

@@ -1,6 +1,6 @@
 import { Stack } from "expo-router";
 
-export default function MainLayout() {
+export default function AdminViewLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }} />
   );
