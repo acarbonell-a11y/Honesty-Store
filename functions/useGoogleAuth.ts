@@ -5,7 +5,7 @@ import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import { useEffect } from "react";
+import * as React from "react";
 import { auth, db } from "../config/firebaseConfig";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -13,67 +13,73 @@ WebBrowser.maybeCompleteAuthSession();
 export default function useGoogleAuth() {
   const router = useRouter();
 
-  // pull IDs from app config (set in app.json -> extra.google)
-  const {clientId, androidClientId, iosClientId } =
+  const { clientId, androidClientId, iosClientId } =
     (Constants.expoConfig?.extra as any)?.google ?? {};
 
-  // Expo Go uses the "Web" client (proxy via auth.expo.dev)
-  // Native builds use platform-specific client IDs (no manual redirect URI!)
+  // Google Auth request
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId,        // for Expo Go
-    androidClientId,     // for Android build
-    iosClientId,          // for iOS build (optional)
+    clientId,        // Web (Expo Go)
+    androidClientId, // Android standalone
+    iosClientId,     // iOS standalone
   });
 
-  useEffect(() => {
-    const signInWithGoogle = async () => {
+  React.useEffect(() => {
+    console.log("clientId:", clientId);
+    const handleGoogleSignIn = async () => {
       if (response?.type === "success") {
-        const idToken =
-          response.params?.id_token || response.authentication?.idToken;
+        const idToken = response.params?.id_token || response.authentication?.idToken;
 
-         if (!idToken) {
-          console.error("❌ No ID token found in response");
+        if (!idToken) {
+          console.error("❌ No ID token found in Google response");
           return;
         }
-        if (idToken) {
-          try {
-            const credential = GoogleAuthProvider.credential(idToken);
-            const userCredential = await signInWithCredential(auth, credential);
-            const user = userCredential.user;
 
-            // Firestore doc
-            const userRef = doc(db, "users", user.uid);
-            const docSnap = await getDoc(userRef);
-            let isAdmin = false;
+        try {
+          // Firebase credential
+          const credential = GoogleAuthProvider.credential(idToken);
+          const userCredential = await signInWithCredential(auth, credential);
+          const user = userCredential.user;
 
-            if (!docSnap.exists()) {
-              await setDoc(userRef, {
-                name: user.displayName || "",
-                email: user.email,
-                isAdmin: false,
-                createdAt: serverTimestamp(),
-              });
-            }
-            else{
-              const userData = docSnap.data();
-              isAdmin = userData.isAdmin === true;
-            }
+          // Firestore user doc
+          const userRef = doc(db, "users", user.uid);
+          const docSnap = await getDoc(userRef);
+          let isAdmin = false;
 
-            console.log("✅ Google login success:", user.email);
-            if (isAdmin) {
-          router.replace("/dashboard"); // goes to (main)/(adminVIEW)/(admin)/dashboard.tsx
+          if (!docSnap.exists()) {
+            await setDoc(userRef, {
+              name: user.displayName || "",
+              email: user.email,
+              isAdmin: false,
+              createdAt: serverTimestamp(),
+            });
           } else {
-            router.replace("/homepage");
+            const userData = docSnap.data();
+            isAdmin = userData.isAdmin === true;
           }
-          } catch (error) {
-            console.error("❌ Firebase Google login error:", error);
-          }
+
+          console.log("✅ Google login success:", user.email);
+
+          // Navigate based on role
+          router.replace(isAdmin ? "/dashboard" : "/homepage");
+        } catch (error) {
+          console.error("❌ Firebase Google login error:", error);
         }
       }
     };
 
-    signInWithGoogle();
+    handleGoogleSignIn();
   }, [response]);
 
-  return { request, response, promptAsync };
+  /**
+   * Sign-in wrapper:
+   * - forces useProxy in Expo Go to avoid 400 error
+   * - uses default redirect for standalone builds
+   */
+  const signIn = () => {
+    // Force proxy in Expo Go
+    const isExpoGo = Constants.appOwnership === "expo" || Constants.appOwnership === "guest";
+    promptAsync({ useProxy: isExpoGo });
+  };
+
+  return { request, response, signIn };
 }

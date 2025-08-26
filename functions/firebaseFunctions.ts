@@ -5,6 +5,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
   serverTimestamp,
   updateDoc,
@@ -146,11 +148,61 @@ export const getTransactionsForUser = async (
   userId: string
 ): Promise<(Transaction & { id: string })[]> => {
   try {
-    const q = query(transactionsCollection, where("userId", "==", userId));
+    // Get yesterday's date
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    // Optional: reset time to midnight to include all of yesterday
+    yesterday.setHours(0, 0, 0, 0);
+
+    // Query for transactions by user and date >= yesterday
+    const q = query(
+      transactionsCollection,
+      where("userId", "==", userId),
+      where("date", ">=", yesterday)
+    );
+
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Transaction),
+    }));
+  } catch (error) {
+    console.error("Error getting user transactions: ", error);
+    return [];
+  }
+};
+
+export const getLatestTransaction = async (): Promise<(Transaction & { id: string }) | null> => {
+  try {
+    const q = query(
+      transactionsCollection,
+      orderBy("date", "desc"), // latest first
+      limit(1)                 // only one document
+    );
+
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) return null;
+
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ...(doc.data() as Transaction) };
+  } catch (error) {
+    console.error("Error getting latest transaction: ", error);
+    return null;
+  }
+};
+
+/**
+ * Fetch all transactions in the collection and return with id
+ */
+export const getAllTransactions = async (): Promise<(Transaction & { id: string })[]> => {
+  try {
+    const q = query(transactionsCollection, orderBy("date", "desc")); // latest first
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Transaction) }));
   } catch (error) {
-    console.error("Error getting user transactions: ", error);
+    console.error("Error getting transactions:", error);
     return [];
   }
 };

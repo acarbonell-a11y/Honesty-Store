@@ -1,14 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Transaction } from "app/(main)/(adminVIEW)/(admin)/transactions";
+import { AdminTransaction } from "app/(main)/(adminVIEW)/(admin)/transactions";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { ms, s, vs } from "react-native-size-matters";
 
 interface TransactionItemProps {
-  transaction: Transaction;
-  onViewReceipt: (transaction: Transaction) => void;
-  onUpdatePayment: (transaction: Transaction) => void;
-  onDownload: (transaction: Transaction) => void;
+  transaction: AdminTransaction;
+  onViewReceipt: (transaction: AdminTransaction) => void;
+  onUpdatePayment: (transaction: AdminTransaction) => void;
+  onDownload: (transaction: AdminTransaction) => void;
 }
 
 export default function TransactionItem({
@@ -17,7 +17,7 @@ export default function TransactionItem({
   onUpdatePayment,
   onDownload,
 }: TransactionItemProps) {
-  const getStatusColor = (status: Transaction['paymentStatus']) => {
+  const getStatusColor = (status: AdminTransaction['paymentStatus']) => {
     switch (status) {
       case "Paid": return "#28a745";
       case "Partially Paid": return "#ffc107";
@@ -26,7 +26,7 @@ export default function TransactionItem({
     }
   };
 
-  const getStatusIcon = (status: Transaction['paymentStatus']) => {
+  const getStatusIcon = (status: AdminTransaction['paymentStatus']) => {
     switch (status) {
       case "Paid": return "checkmark-circle";
       case "Partially Paid": return "time-outline";

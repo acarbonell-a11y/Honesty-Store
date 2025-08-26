@@ -17,6 +17,7 @@
       }
     },
     "android": {
+      "googleServicesFile": "./app/google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -26,12 +27,11 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
       "@react-native-google-signin/google-signin",
+      "expo-router",
       [
         "expo-splash-screen",
         {
@@ -41,25 +41,16 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-web-browser",
-      [
-        "@react-native-google-signin/google-signin",
-        {
-          "iosUrlScheme":"com.googleusercontent.apps.688642102325-i2hfo5plhgq0ad5ieuva90epltghq5dc"
-          
-        }
-      ]
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "google":
-      {
-      "expoClientId": "688642102325-8ggre5ts31ic8kejd41d0svq65k76l89.apps.googleusercontent.com",
-      "clientId": "688642102325-8ggre5ts31ic8kejd41d0svq65k76l89.apps.googleusercontent.com",
-      "iosClientId": "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com",
-      "androidClientId": "688642102325-38pe79m1ufdtsleqjs8deeo7oule0atl.apps.googleusercontent.com"
+      "google": {
+        "clientId": "688642102325-8ggre5ts31ic8kejd41d0svq65k76l89.apps.googleusercontent.com",
+        "androidClientId": "688642102325-38pe79m1ufdtsleqjs8deeo7oule0atl.apps.googleusercontent.com",
+        "iosClientId": "688642102325-i2hfo5plhgq0ad5ieuva90epltghq5dc.apps.googleusercontent.com"
       },
       "router": {},
       "eas": {

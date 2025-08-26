@@ -1,26 +1,36 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { db } from "config/firebaseConfig";
-import { collection, doc, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  Timestamp,
+  updateDoc,
+} from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ms, s, vs } from "react-native-size-matters";
 
+import { getTotalSalesTrans } from "@/functions/transactionFunctions";
 import Avatar from "../(components)/Avatar";
 import PaymentModal from "../(components)/PaymentModal";
 import ReceiptModal from "../(components)/ReceiptModal";
 import TransactionItem from "../(components)/TransactionItem";
 
+// Individual item inside a transaction
 export interface TransactionItemType {
-  id: string;
+  id?: string;
   name: string;
   quantity: number;
   price: number;
   total: number;
 }
 
-export interface Transaction {
-  id: string;
+// AdminTransaction type (id not required)
+export interface AdminTransaction {
   receiptNumber: string;
   date: Date;
   customerName?: string;
@@ -35,39 +45,41 @@ export interface Transaction {
 }
 
 export default function Transactions() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<AdminTransaction[]>([]);
   const [searchText, setSearchText] = useState("");
   const [filterStatus, setFilterStatus] = useState<"All" | "Paid" | "Partially Paid" | "Unpaid">("All");
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<AdminTransaction | null>(null);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
 
-  const flatListRef = useRef<FlatList<Transaction>>(null);
-
-  // Fetch transactions in real-time from Firestore
+  const flatListRef = useRef<FlatList<AdminTransaction>>(null);
+  
+  // Fetch transactions from Firestore
   useEffect(() => {
     const q = query(collection(db, "transactions"), orderBy("date", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Transaction[] = snapshot.docs.map(docSnap => {
-        const d = docSnap.data();
-        return {
-          id: docSnap.id,
-          receiptNumber: d.receiptNumber,
-          date: d.date?.toDate ? d.date.toDate() : new Date(),
-          customerName: d.customerName,
-          items: d.items || [],
-          subtotal: d.subtotal || 0,
-          tax: d.tax || 0,
-          total: d.total || 0,
-          paymentStatus: d.paymentStatus,
-          amountPaid: d.amountPaid || 0,
-          paymentMethod: d.paymentMethod,
-          notes: d.notes,
-        };
-      });
-      setTransactions(data);
-    }, error => console.error("Error fetching transactions:", error));
-
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const data: AdminTransaction[] = snapshot.docs.map((docSnap) => {
+          const d = docSnap.data() as any;
+          return {
+            receiptNumber: d.receiptNumber,
+            date: d.date instanceof Timestamp ? d.date.toDate() : new Date(),
+            customerName: d.customerName,
+            items: d.items || [],
+            subtotal: d.subtotal || 0,
+            tax: d.tax || 0,
+            total: d.total || 0,
+            paymentStatus: d.paymentStatus,
+            amountPaid: d.amountPaid || 0,
+            paymentMethod: d.paymentMethod,
+            notes: d.notes,
+          };
+        });
+        setTransactions(data);
+      },
+      (error) => console.error("Error fetching transactions:", error)
+    );
     return () => unsubscribe();
   }, []);
 
@@ -77,27 +89,25 @@ export default function Transactions() {
     }, [])
   );
 
-  const updatePaymentStatus = useCallback(async (
-    transactionId: string,
-    newStatus: Transaction['paymentStatus'],
-    amountPaid: number,
-    paymentMethod?: Transaction['paymentMethod']
-  ) => {
-    try {
-      const transactionRef = doc(db, "transactions", transactionId);
-      await updateDoc(transactionRef, { paymentStatus: newStatus, amountPaid, paymentMethod: paymentMethod || null });
-    } catch (error) {
-      console.error("Error updating transaction:", error);
-      Alert.alert("Error", "Could not update payment status. Make sure you are admin.");
-    }
-  }, []);
+  const updatePaymentStatus = useCallback(
+    async (receiptNumber: string, newStatus: AdminTransaction["paymentStatus"], amountPaid: number, paymentMethod?: AdminTransaction["paymentMethod"]) => {
+      try {
+        const transactionRef = doc(db, "transactions", receiptNumber);
+        await updateDoc(transactionRef, { paymentStatus: newStatus, amountPaid, paymentMethod: paymentMethod || null });
+      } catch (error) {
+        console.error("Error updating transaction:", error);
+        Alert.alert("Error", "Could not update payment status. Make sure you are admin.");
+      }
+    },
+    []
+  );
 
-  const viewReceipt = useCallback((transaction: Transaction) => {
+  const viewReceipt = useCallback((transaction: AdminTransaction) => {
     setSelectedTransaction(transaction);
     setReceiptModalVisible(true);
   }, []);
 
-  const openPaymentModal = useCallback((transaction: Transaction) => {
+  const openPaymentModal = useCallback((transaction: AdminTransaction) => {
     setSelectedTransaction(transaction);
     setPaymentModalVisible(true);
   }, []);
@@ -108,18 +118,18 @@ export default function Transactions() {
     setSelectedTransaction(null);
   }, []);
 
-  const downloadReceipt = useCallback((transaction: Transaction) => {
+  const downloadReceipt = useCallback((transaction: AdminTransaction) => {
     Alert.alert("Download Receipt", `Receipt ${transaction.receiptNumber} download functionality goes here.`);
   }, []);
 
   const filteredTransactions = useMemo(() => {
     return transactions
-      .filter(transaction => {
+      .filter((t) => {
         const matchesSearch =
-          transaction.receiptNumber.toLowerCase().includes(searchText.toLowerCase()) ||
-          (transaction.customerName?.toLowerCase().includes(searchText.toLowerCase())) ||
-          transaction.items.some(item => item.name.toLowerCase().includes(searchText.toLowerCase()));
-        const matchesFilter = filterStatus === "All" || transaction.paymentStatus === filterStatus;
+          t.receiptNumber.toLowerCase().includes(searchText.toLowerCase()) ||
+          (t.customerName?.toLowerCase().includes(searchText.toLowerCase())) ||
+          t.items.some((item) => item.name.toLowerCase().includes(searchText.toLowerCase()));
+        const matchesFilter = filterStatus === "All" || t.paymentStatus === filterStatus;
         return matchesSearch && matchesFilter;
       })
       .sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -127,24 +137,21 @@ export default function Transactions() {
 
   const transactionStats = useMemo(() => {
     const total = transactions.length;
-    const paid = transactions.filter(t => t.paymentStatus === "Paid").length;
-    const partiallyPaid = transactions.filter(t => t.paymentStatus === "Partially Paid").length;
-    const unpaid = transactions.filter(t => t.paymentStatus === "Unpaid").length;
-    const totalRevenue = transactions.filter(t => t.paymentStatus === "Paid").reduce((sum, t) => sum + t.total, 0);
-    const pendingAmount = transactions.filter(t => t.paymentStatus !== "Paid").reduce((sum, t) => sum + (t.total - t.amountPaid), 0);
+    const paid = transactions.filter((t) => t.paymentStatus === "Paid").length;
+    const partiallyPaid = transactions.filter((t) => t.paymentStatus === "Partially Paid").length;
+    const unpaid = transactions.filter((t) => t.paymentStatus === "Unpaid").length;
+    const totalRevenue = getTotalSalesTrans(transactions);
+    const pendingAmount = transactions.filter((t) => t.paymentStatus !== "Paid").reduce((sum, t) => sum + (t.total - t.amountPaid), 0);
     return { total, paid, partiallyPaid, unpaid, totalRevenue, pendingAmount };
   }, [transactions]);
 
-  const renderItem = useCallback(({ item }: { item: Transaction }) => (
-    <TransactionItem
-      transaction={item}
-      onViewReceipt={viewReceipt}
-      onUpdatePayment={openPaymentModal}
-      onDownload={downloadReceipt}
-    />
-  ), [viewReceipt, openPaymentModal, downloadReceipt]);
+  const renderItem = useCallback(
+    ({ item }: { item: AdminTransaction }) => (
+      <TransactionItem transaction={item} onViewReceipt={viewReceipt} onUpdatePayment={openPaymentModal} onDownload={downloadReceipt} />
+    ),
+    [viewReceipt, openPaymentModal, downloadReceipt]
+  );
 
-  // Full header with stats, search, filters
   const ListHeaderComponent = useMemo(() => (
     <>
       <View style={styles.header}>
@@ -170,25 +177,14 @@ export default function Transactions() {
         </View>
       </View>
 
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search receipts, customers, or items..."
-        value={searchText}
-        onChangeText={setSearchText}
-      />
+      <TextInput style={styles.searchInput} placeholder="Search receipts, customers, or items..." value={searchText} onChangeText={setSearchText} />
 
       <View style={styles.filterContainer}>
         <Text style={styles.filterLabel}>Filter by status:</Text>
         <View style={styles.filterButtons}>
-          {(["All", "Paid", "Partially Paid", "Unpaid"] as const).map(status => (
-            <TouchableOpacity
-              key={status}
-              style={[styles.filterButton, filterStatus === status && styles.activeFilterButton]}
-              onPress={() => setFilterStatus(status)}
-            >
-              <Text style={[styles.filterButtonText, filterStatus === status && styles.activeFilterText]}>
-                {status}
-              </Text>
+          {(["All", "Paid", "Partially Paid", "Unpaid"] as const).map((status) => (
+            <TouchableOpacity key={status} style={[styles.filterButton, filterStatus === status && styles.activeFilterButton]} onPress={() => setFilterStatus(status)}>
+              <Text style={[styles.filterButtonText, filterStatus === status && styles.activeFilterText]}>{status}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -215,7 +211,7 @@ export default function Transactions() {
         <FlatList
           ref={flatListRef}
           data={filteredTransactions}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => item.receiptNumber + index}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={ListHeaderComponent}
@@ -225,19 +221,8 @@ export default function Transactions() {
 
         {selectedTransaction && (
           <>
-            <ReceiptModal
-              visible={receiptModalVisible}
-              transaction={selectedTransaction}
-              onClose={closeModals}
-              onDownload={downloadReceipt}
-            />
-
-            <PaymentModal
-              visible={paymentModalVisible}
-              transaction={selectedTransaction}
-              onClose={closeModals}
-              onUpdatePayment={updatePaymentStatus}
-            />
+            <ReceiptModal visible={receiptModalVisible} transaction={selectedTransaction} onClose={closeModals} onDownload={downloadReceipt} />
+            <PaymentModal visible={paymentModalVisible} transaction={selectedTransaction} onClose={closeModals} onUpdatePayment={updatePaymentStatus} />
           </>
         )}
       </View>

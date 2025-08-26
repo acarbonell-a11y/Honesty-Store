@@ -1,3 +1,6 @@
+import { getAllTransactions, getInventory } from "functions/firebaseFunctions";
+import { getBestSellingProducts } from "functions/productFunctions";
+import { getMonthlySales } from "functions/reportsFunctions";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,56 +18,67 @@ import Card from "../(components)/Card";
 import Card2 from "../(components)/Card2";
 import Popup from "../(components)/Popup";
 
-// Correct relative imports
-import { auth } from "config/firebaseConfig";
-import { getInventory, getTransactionsForUser } from "functions/firebaseFunctions";
-import { getUserProfile } from "services/userServices";
-
 export default function Dashboard() {
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalData, setModalData] = useState<any>({});
-  const [user, setUser] = useState<any>(null);
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
+  const now = new Date();
+  const currentMonth = now.getMonth(); // 0 = Jan
+  const currentYear = now.getFullYear();
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
 
-        // ✅ Get the logged-in user ID
-        const userId = auth.currentUser?.uid; // ✅ no ()
-        if (!userId) throw new Error("No authenticated user found");
-
-        // User profile
-        const profile = await getUserProfile(userId);
-        setUser(profile);
-
-        // Inventory
+        // Fetch inventory
         const inventory = await getInventory();
         const lowStock = inventory.filter(
           (item: { quantity: number; lowStockThreshold: number }) =>
             item.quantity <= item.lowStockThreshold
         );
 
-        // Transactions
-        const transactions = await getTransactionsForUser(userId);
-        const receipts = transactions.slice(0, 3).map((t: any) => ({
-          name: `Transaction: ${t.id}`,
-          value: `₱${t.totalAmount}`,
-          subtitle: t.transactionType.toUpperCase(),
+        // Fetch all transactions
+        const rawTransactions = await getAllTransactions();
+
+        // Convert Firestore timestamps to JS Dates safely
+        const transactions = rawTransactions.map((t: any) => ({
+          ...t,
+          date: t.date?.toDate ? t.date.toDate() : new Date(0),
         }));
 
-        // Sales summary
+        setAllTransactions(transactions);
+
+        // Latest 3 transactions for receipts
+        const latestTransactions = transactions.sort(
+          (a: any, b: any) => b.date.getTime() - a.date.getTime()
+        );
+        const receipts = latestTransactions.slice(0, 3).map((t: any) => ({
+          name: `Transaction: ${t.id ?? "N/A"}`,
+          value: `₱${t.total ?? 0}`,
+          subtitle: (t.customerName ?? "unknown").toUpperCase(),
+        }));
+
+        // Total sales calculation
         const totalSales = transactions
           .filter((t: any) => t.transactionType === "sale")
-          .reduce((sum: number, t: any) => sum + t.totalAmount, 0);
+          .reduce((sum: number, t: any) => sum + (t.totalAmount ?? 0), 0);
+
+        // Monthly sales
+        const monthlySales = getMonthlySales(transactions, currentMonth, currentYear);
+
+        // Best Selling
+        const bestSellingProducts = await getBestSellingProducts();
 
         setModalData({
           bestSelling: {
             title: "Best Selling Products",
-            data: [
-              { name: "Coffee Beans", value: "₱6,000", subtitle: "Sold: 120 units" },
-            ],
+            data: bestSellingProducts.map((p) => ({
+              name: p.name,
+              value: `₱${p.price}`,
+              subtitle: `Sold: ${p.sold} units`,
+            })),
           },
           receipts: { title: "Recent Receipts", data: receipts },
           lowStock: {
@@ -78,9 +92,10 @@ export default function Dashboard() {
           sales: {
             title: "Sales Performance",
             data: [
-              { name: "Monthly Sales", value: totalSales, hint: "Current month total" },
+              { name: "Monthly Sales", value: monthlySales, hint: "Current month total" },
             ],
           },
+          totalSales: totalSales, // optional
         });
       } catch (err) {
         console.error("Error loading dashboard data:", err);
@@ -126,7 +141,6 @@ export default function Dashboard() {
     <>
       <StatusBar barStyle="dark-content" backgroundColor="#f8f9fa" />
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.headerSubTitle}>Shopnesty</Text>
@@ -135,12 +149,11 @@ export default function Dashboard() {
           <Avatar />
         </View>
 
-        {/* Example Metric Card */}
         <TouchableOpacity activeOpacity={0.8}>
           <Card
             title="Total Transactions"
-            value="120"
-            subtitle="This Month"
+            value={allTransactions.length ?? 0}
+            subtitle="All Users"
             icon="swap-horizontal"
             iconColor="#e1b61c"
             trend="+15% from last month"
@@ -148,13 +161,12 @@ export default function Dashboard() {
           />
         </TouchableOpacity>
 
-        {/* Grid Cards */}
         <View style={styles.gridContainer}>
           <View style={styles.gridRow}>
             <TouchableOpacity style={styles.cardWrapper} onPress={() => openModal("bestSelling")}>
               <Card2
                 title="Best Selling"
-                value="8"
+                value={modalData.bestSelling?.data.length || 0}
                 icon="pricetag"
                 iconColor="#1a6a37"
                 backgroundColor="#eafaf1"
