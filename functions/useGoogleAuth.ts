@@ -44,6 +44,7 @@ export default function useGoogleAuth() {
             // Firestore doc
             const userRef = doc(db, "users", user.uid);
             const docSnap = await getDoc(userRef);
+            let isAdmin = false;
 
             if (!docSnap.exists()) {
               await setDoc(userRef, {
@@ -53,9 +54,17 @@ export default function useGoogleAuth() {
                 createdAt: serverTimestamp(),
               });
             }
+            else{
+              const userData = docSnap.data();
+              isAdmin = userData.isAdmin === true;
+            }
 
             console.log("✅ Google login success:", user.email);
-            router.replace("/(main)/homepage");
+            if (isAdmin) {
+          router.replace("/dashboard"); // goes to (main)/(adminVIEW)/(admin)/dashboard.tsx
+          } else {
+            router.replace("/homepage");
+          }
           } catch (error) {
             console.error("❌ Firebase Google login error:", error);
           }

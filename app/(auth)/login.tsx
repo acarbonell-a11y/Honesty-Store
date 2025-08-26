@@ -16,7 +16,7 @@ export default function LoginScreen() {
   if (user) {
     if (user.isAdmin) {
       Alert.alert("Admin Login", "Welcome back, Admin!");
-      router.replace("./dashboard"); // 👈 admin route
+      router.replace("/(main)/(adminVIEW)/(admin)/dashboard"); // 👈 admin route
     } else {
       Alert.alert("Success", "Welcome back!");
       router.replace("/(main)/homepage");
