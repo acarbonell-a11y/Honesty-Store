@@ -37,7 +37,7 @@ export default function ReceiptModal({
       day: 'numeric',
     });
   };
-
+``
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('en-US', {
       hour: '2-digit',

@@ -1,5 +1,5 @@
 import { getUserProfile } from "@/services/userServices";
-import { signInWithEmailAndPassword } from "firebase/auth"; //imports the handler for signing in.
+import { signInWithEmailAndPassword, signOut } from "firebase/auth"; //imports the handler for signing in.
 import { Alert } from "react-native";
 import { auth } from "../config/firebaseConfig";
 import { handleSignUp } from "./firebaseFunctions"; // the firebase wrapper 
@@ -49,4 +49,9 @@ export const onLogin = async (
     console.error("Login error:", error.message);
     return null;
   }
+};
+
+// Sign out
+export const logoutUser = () => {
+  return signOut(auth);
 };

@@ -1,6 +1,8 @@
 // Reports.tsx
-import { useFocusEffect } from "@react-navigation/native"; // If using react-navigation
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { db } from "config/firebaseConfig";
+import { doc, getDoc } from "firebase/firestore";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
   ScrollView,
@@ -25,43 +27,9 @@ interface ReportModalData {
   }>;
 }
 
-const REPORT_MODAL_DATA: Record<string, ReportModalData> = {
-  salesByDate: {
-    title: "Sales by Date Range",
-    data: [
-      { name: "Daily", value: "₱2,500" },
-      { name: "Weekly", value: "₱12,500" },
-      { name: "Monthly", value: "₱50,000" },
-    ],
-  },
-  topProducts: {
-    title: "Top-Selling Products",
-    data: [
-      { name: "Coffee Beans", value: "120 units" },
-      { name: "Green Tea", value: "80 units" },
-      { name: "Espresso Blend", value: "65 units" },
-    ],
-  },
-  revenue: {
-    title: "Revenue Reports",
-    data: [
-      { name: "This Week", value: "₱12,500" },
-      { name: "This Month", value: "₱50,000" },
-      { name: "Year-to-Date", value: "₱600,000" },
-    ],
-  },
-  stockMovement: {
-    title: "Stock Movement",
-    data: [
-      { name: "Sugar Packets", value: "5 remaining" },
-      { name: "Milk Cartons", value: "3 remaining" },
-      { name: "Paper Cups", value: "8 remaining" },
-    ],
-  },
-};
-
 export default function Reports() {
   const [activeModal, setActiveModal] = useState<string | null>(null);
+  const [reportData, setReportData] = useState<Record<string, ReportModalData>>({});
   const scrollRef = useRef<ScrollView>(null);
 
   // Reset scroll to top when screen gains focus
@@ -79,17 +47,53 @@ export default function Reports() {
     setActiveModal(null);
   }, []);
 
+  // Fetch reports from Firebase Firestore
+  useEffect(() => {
+    const fetchReports = async () => {
+      const reportsCollection = ["salesByDate", "topProducts", "revenue", "stockMovement"];
+      const data: Record<string, ReportModalData> = {};
+
+      for (const reportId of reportsCollection) {
+        const docRef = doc(db, "reports", reportId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          data[reportId] = docSnap.data() as ReportModalData;
+        } else {
+          console.log(`No such document: ${reportId}`);
+        }
+      }
+
+      setReportData(data);
+    };
+
+    fetchReports();
+  }, []);
+
   const reportStats = useMemo(
     () => ({
-      totalSales: "₱50,000",
-      topProducts: 3,
-      lowStockItems: 3,
+      totalSales: reportData.revenue?.data.reduce((acc, item) => acc + parseFloat(item.value.replace(/[^0-9.-]+/g, '')), 0) || 0,
+      topProducts: reportData.topProducts?.data.length || 0,
+      lowStockItems: reportData.stockMovement?.data.filter(item => item.value.includes("low")).length || 0,
     }),
-    []
+    [reportData]
   );
 
+  // Function to export report as CSV
+  const exportReport = async () => {
+    const headers = ["Report", "Name", "Value", "Subtitle"];
+    const rows: string[] = [];
+
+    Object.keys(reportData).forEach(key => {
+      const report = reportData[key];
+      report.data.forEach(item => {
+        rows.push(`${report.title},${item.name},${item.value},${item.subtitle || ""}`);
+      });
+    });
+  };
+
   const renderModal = () => {
-    if (!activeModal || !REPORT_MODAL_DATA[activeModal]) return null;
+    if (!activeModal || !reportData[activeModal]) return null;
 
     return (
       <Modal
@@ -100,8 +104,8 @@ export default function Reports() {
         statusBarTranslucent
       >
         <Popup
-          title={REPORT_MODAL_DATA[activeModal].title}
-          data={REPORT_MODAL_DATA[activeModal].data}
+          title={reportData[activeModal].title}
+          data={reportData[activeModal].data}
           onClose={closeModal}
         />
       </Modal>
@@ -131,7 +135,7 @@ export default function Reports() {
           <View style={styles.cardsContainer}>
             <TouchableOpacity style={styles.card}>
               <Text style={styles.cardLabel}>Total Sales</Text>
-              <Text style={styles.cardValue}>{reportStats.totalSales}</Text>
+              <Text style={styles.cardValue}>₱{reportStats.totalSales}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.card}>
@@ -165,7 +169,7 @@ export default function Reports() {
             >
               <Card2
                 title="Top Products"
-                value="3 items"
+                value={`${reportStats.topProducts} items`}
                 icon="pricetag"
                 iconColor="#1a6a37"
                 backgroundColor="#fff"
@@ -179,7 +183,7 @@ export default function Reports() {
             >
               <Card2
                 title="Revenue"
-                value="₱50,000"
+                value={`₱${reportStats.totalSales}`}
                 icon="trending-up"
                 iconColor="#1a6a37"
                 backgroundColor="#fff"
@@ -193,7 +197,7 @@ export default function Reports() {
             >
               <Card2
                 title="Stock Movement"
-                value="3 low"
+                value={`${reportStats.lowStockItems} low`}
                 icon="swap-horizontal"
                 iconColor="#1a6a37"
                 backgroundColor="#fff"
@@ -203,7 +207,7 @@ export default function Reports() {
 
             <TouchableOpacity
               style={styles.card}
-              onPress={() => console.log("Export Reports")}
+              onPress={exportReport}
             >
               <Card2
                 title="Export Reports"
@@ -241,7 +245,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: vs(20),
-    marginTop:(20)
+    marginTop: 20,
   },
   headerSubTitle: {
     fontSize: s(18),

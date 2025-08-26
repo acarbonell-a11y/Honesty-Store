@@ -1,50 +1,71 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Product } from "app/(main)/(adminVIEW)/(admin)/inventory";
 import React, { useRef } from "react";
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 import { ms, s, vs } from "react-native-size-matters";
-import { Product } from "../admin/inventory";
 
 interface ProductItemProps {
   product: Product;
   onEdit: (product: Product) => void;
   onDelete: (id: string) => void;
+  onPress?: () => void;
 }
 
-export default function ProductItem({ product, onEdit, onDelete }: ProductItemProps) {
+export default function ProductItem({
+  product,
+  onEdit,
+  onDelete,
+}: ProductItemProps) {
   const swipeableRef = useRef<Swipeable>(null);
 
-  const getStatusColor = (status: Product['status']) => {
+  const getStatusColor = (status: Product["status"]) => {
     switch (status) {
-      case "In stock": return "#28a745";
-      case "Low stock": return "#ffc107";
-      case "Out of stock": return "#dc3545";
-      default: return "#6c757d";
+      case "In stock":
+        return "#28a745";
+      case "Low stock":
+        return "#ffc107";
+      case "Out of stock":
+        return "#dc3545";
+      default:
+        return "#6c757d";
     }
   };
 
-  const getStatusIcon = (status: Product['status']) => {
+  const getStatusIcon = (status: Product["status"]) => {
     switch (status) {
-      case "In stock": return "checkmark-circle";
-      case "Low stock": return "warning";
-      case "Out of stock": return "close-circle";
-      default: return "help-circle";
+      case "In stock":
+        return "checkmark-circle";
+      case "Low stock":
+        return "warning";
+      case "Out of stock":
+        return "close-circle";
+      default:
+        return "help-circle";
     }
   };
 
-  // Fixed: Added proper type annotation
+  // Type fixes for Animated params
   const renderRightActions = (
-    progress: Animated.AnimatedAddition<number>, 
-    dragX: Animated.AnimatedAddition<number>
+    progress: Animated.AnimatedInterpolation<string | number>,
+    dragX: Animated.AnimatedInterpolation<string | number>
   ) => {
     const trans = dragX.interpolate({
       inputRange: [-100, -50, 0],
       outputRange: [0, 50, 100],
-      extrapolate: 'clamp',
+      extrapolate: "clamp",
     });
 
     return (
-      <Animated.View style={[styles.rightActions, { transform: [{ translateX: trans }] }]}>
+      <Animated.View
+        style={[styles.rightActions, { transform: [{ translateX: trans }] }]}
+      >
         <TouchableOpacity
           style={styles.deleteButton}
           onPress={() => {
@@ -59,19 +80,20 @@ export default function ProductItem({ product, onEdit, onDelete }: ProductItemPr
     );
   };
 
-  // Fixed: Added proper type annotation
   const renderLeftActions = (
-    progress: Animated.AnimatedAddition<number>, 
-    dragX: Animated.AnimatedAddition<number>
+    progress: Animated.AnimatedInterpolation<string | number>,
+    dragX: Animated.AnimatedInterpolation<string | number>
   ) => {
     const trans = dragX.interpolate({
       inputRange: [0, 50, 100],
       outputRange: [0, 0, 0],
-      extrapolate: 'clamp',
+      extrapolate: "clamp",
     });
 
     return (
-      <Animated.View style={[styles.leftActions, { transform: [{ translateX: trans }] }]}>
+      <Animated.View
+        style={[styles.leftActions, { transform: [{ translateX: trans }] }]}
+      >
         <TouchableOpacity
           style={styles.editButton}
           onPress={() => {
@@ -100,17 +122,22 @@ export default function ProductItem({ product, onEdit, onDelete }: ProductItemPr
             <Text style={styles.itemName} numberOfLines={1}>
               {product.name}
             </Text>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(product.status) }]}>
-              <Ionicons 
-                name={getStatusIcon(product.status)} 
-                size={12} 
-                color="#fff" 
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: getStatusColor(product.status) },
+              ]}
+            >
+              <Ionicons
+                name={getStatusIcon(product.status)}
+                size={12}
+                color="#fff"
                 style={styles.statusIcon}
               />
               <Text style={styles.statusText}>{product.status}</Text>
             </View>
           </View>
-          
+
           <View style={styles.itemDetails}>
             <View style={styles.detailRow}>
               <Ionicons name="pricetag" size={16} color="#6c757d" />

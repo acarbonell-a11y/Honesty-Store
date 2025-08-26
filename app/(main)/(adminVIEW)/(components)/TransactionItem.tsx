@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Transaction } from "app/(main)/(adminVIEW)/(admin)/transactions";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { ms, s, vs } from "react-native-size-matters";
-import { Transaction } from "../(admin)/transactions";
 
 interface TransactionItemProps {
   transaction: Transaction;
@@ -91,7 +91,7 @@ export default function TransactionItem({
       <View style={styles.itemsPreview}>
         <Text style={styles.itemsLabel}>Items ({transaction.items.length}):</Text>
         <Text style={styles.itemsList} numberOfLines={2}>
-          {transaction.items.map(item => `${item.name} (${item.quantity})`).join(', ')}
+          {transaction.items.map((item: { name: any; quantity: any; }) => `${item.name} (${item.quantity})`).join(', ')}
         </Text>
       </View>
 

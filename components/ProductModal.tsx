@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Product } from "app/(main)/(adminVIEW)/(admin)/inventory";
 import React, { useEffect, useState } from "react";
 import {
   Dimensions,
@@ -13,7 +14,6 @@ import {
   View,
 } from "react-native";
 import { ms, s, vs } from "react-native-size-matters";
-import { Product } from "../admin/inventory";
 
 interface ProductModalProps {
   visible: boolean;

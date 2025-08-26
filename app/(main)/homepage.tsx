@@ -1,13 +1,11 @@
 // WelcomeScreen.tsx
-
-import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-
 /**
  * A simple welcome screen component for an Expo app.
  * It displays a centered "Welcome" message.
  */
 const WelcomeScreen = () => {
+  
   return (
     
     <View style={styles.container}>

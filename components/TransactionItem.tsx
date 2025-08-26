@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Transaction } from "app/(main)/(adminVIEW)/(admin)/transactions";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { ms, s, vs } from "react-native-size-matters";
-import { Transaction } from "../admin/transactions";
 
 interface TransactionItemProps {
   transaction: Transaction;

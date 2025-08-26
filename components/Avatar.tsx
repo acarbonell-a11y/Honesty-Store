@@ -8,7 +8,7 @@ const Avatar = () => {
 
   return (
     <TouchableOpacity onPress={() => console.log("ahhahahah")}>
-      <Image source={require("../../assets/avatar.png")} style={styles.avatar} />
+      <Image source={require('assets/avatar.png')} style={styles.avatar} />
     </TouchableOpacity>
   );
 };

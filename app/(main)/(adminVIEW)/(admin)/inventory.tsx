@@ -1,7 +1,22 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+// app/screens/Inventory.tsx
+import Avatar from "components/Avatar";
+import ProductItem from "components/ProductItem";
+import ProductModal from "components/ProductModal";
+import SearchBar from "components/SearchBar";
+import { db } from "config/firebaseConfig";
 import {
+  Timestamp,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  updateDoc,
+} from "firebase/firestore";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Keyboard,
@@ -13,132 +28,190 @@ import {
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ms, s, vs } from "react-native-size-matters";
-import Avatar from "../(components)/Avatar";
-import ProductItem from "../(components)/ProductItem";
-import ProductModal from "../(components)/ProductModal";
-import SearchBar from "../(components)/SearchBar";
 
+// ---------- Types ----------
 export interface Product {
   id: string;
   name: string;
   price: number;
-  stock: number;
+  stock: number; // mapped from Firestore "quantity"
   status: "In stock" | "Low stock" | "Out of stock";
   category?: string;
-  lastUpdated?: Date;
+  lowStockThreshold?: number;
+  lastUpdated?: Timestamp;
 }
 
-const INITIAL_PRODUCTS: Product[] = [
-  { id: "1", name: "Premium Coffee Beans", price: 12.99, stock: 50, status: "In stock", category: "Beverages", lastUpdated: new Date() },
-  { id: "2", name: "Organic Green Tea", price: 8.50, stock: 8, status: "Low stock", category: "Beverages", lastUpdated: new Date() },
-  { id: "3", name: "Artisan Pastries", price: 4.25, stock: 0, status: "Out of stock", category: "Food", lastUpdated: new Date() },
-  { id: "4", name: "Specialty Milk", price: 3.75, stock: 25, status: "In stock", category: "Dairy", lastUpdated: new Date() },
-];
+// ---------- Config ----------
+const LOW_STOCK_FALLBACK = 15;
 
-const LOW_STOCK_THRESHOLD = 15;
-const OUT_OF_STOCK_THRESHOLD = 0;
+// ---------- Helpers ----------
+const computeStatus = (
+  stock: number,
+  lowStockThreshold?: number
+): Product["status"] => {
+  if (stock <= 0) return "Out of stock";
+  const threshold = lowStockThreshold ?? LOW_STOCK_FALLBACK;
+  return stock <= threshold ? "Low stock" : "In stock";
+};
 
-export default function Inventory() {
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+const Inventory: React.FC = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchText, setSearchText] = useState("");
-  const [sortBy, setSortBy] = useState<'name' | 'stock' | 'price'>('name');
+  const [sortBy, setSortBy] = useState<"name" | "stock" | "price">("name");
 
   const flatListRef = useRef<FlatList<Product>>(null);
+  const inventoryRef = collection(db, "inventory");
 
-  // Reset scroll when screen is focused
-  useFocusEffect(
-    useCallback(() => {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    }, [])
-  );
+  // ---------- Realtime listener ----------
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      inventoryRef,
+      (snapshot) => {
+        const items: Product[] = snapshot.docs.map((d) => {
+          const data = d.data() as any;
+          const stock = typeof data.quantity === "number" ? data.quantity : 0;
+          const lowStockThreshold =
+            typeof data.lowStockThreshold === "number"
+              ? data.lowStockThreshold
+              : undefined;
 
-  const getProductStatus = useCallback((stock: number): Product['status'] => {
-    if (stock <= OUT_OF_STOCK_THRESHOLD) return "Out of stock";
-    if (stock <= LOW_STOCK_THRESHOLD) return "Low stock";
-    return "In stock";
-  }, []);
+          return {
+            id: d.id,
+            name: data.name ?? "Untitled",
+            price: typeof data.price === "number" ? data.price : 0,
+            stock,
+            category: data.category ?? undefined,
+            lowStockThreshold,
+            status:
+              (data.status as Product["status"]) ??
+              computeStatus(stock, lowStockThreshold),
+            lastUpdated: data.lastUpdated as Timestamp | undefined,
+          };
+        });
 
-  const deleteProduct = useCallback((id: string) => {
-    Alert.alert(
-      "Delete Product",
-      "Are you sure you want to delete this product?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => setProducts(prev => prev.filter(p => p.id !== id)) },
-      ]
+        setProducts(items);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("onSnapshot(inventory) error:", err);
+        setLoading(false);
+      }
     );
+
+    return () => unsubscribe();
   }, []);
 
-  const editProduct = useCallback((product: Product) => {
-    setEditingProduct(product);
-    setModalVisible(true);
-  }, []);
+  // ---------- Add / Update ----------
+  const saveProduct = async (
+    productData: Omit<Product, "id" | "status" | "lastUpdated">
+  ) => {
+    try {
+      const { name, price, stock, category, lowStockThreshold } = productData;
+      const nextStatus = computeStatus(stock, lowStockThreshold);
 
-  const openAddModal = useCallback(() => {
+      if (editingProduct) {
+        const ref = doc(db, "inventory", editingProduct.id);
+        await updateDoc(ref, {
+          name,
+          price,
+          quantity: stock,
+          category: category ?? null,
+          lowStockThreshold: lowStockThreshold ?? null,
+          status: nextStatus,
+          lastUpdated: serverTimestamp(),
+        });
+      } else {
+        await addDoc(inventoryRef, {
+          name,
+          price,
+          quantity: stock,
+          category: category ?? null,
+          lowStockThreshold: lowStockThreshold ?? LOW_STOCK_FALLBACK,
+          status: nextStatus,
+          lastUpdated: serverTimestamp(),
+        });
+      }
+
+      closeModal();
+    } catch (error) {
+      console.error("Error saving product:", error);
+      Alert.alert("Error", "Could not save the product. Please try again.");
+    }
+  };
+
+  // ---------- Delete ----------
+  const deleteProduct = async (id: string) => {
+    try {
+      const ref = doc(db, "inventory", id);
+      await deleteDoc(ref);
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      Alert.alert("Error", "Could not delete the product. Please try again.");
+    }
+  };
+
+  const confirmDelete = (id: string) => {
+    Alert.alert("Delete Product", "Are you sure you want to delete this product?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => deleteProduct(id) },
+    ]);
+  };
+
+  // ---------- Modal controls ----------
+  const openAddModal = () => {
     setEditingProduct(null);
     setModalVisible(true);
-  }, []);
-
-  const closeModal = useCallback(() => {
+  };
+  const openEditModal = (product: Product) => {
+    setEditingProduct(product);
+    setModalVisible(true);
+  };
+  const closeModal = () => {
     setModalVisible(false);
     setEditingProduct(null);
     Keyboard.dismiss();
-  }, []);
+  };
 
-  const saveProduct = useCallback((productData: Omit<Product, 'id' | 'status' | 'lastUpdated'>) => {
-    const { name, price, stock, category } = productData;
-    
-    if (!name.trim()) { Alert.alert("Validation Error", "Product name is required"); return; }
-    if (price <= 0) { Alert.alert("Validation Error", "Price must be greater than 0"); return; }
-    if (stock < 0) { Alert.alert("Validation Error", "Stock cannot be negative"); return; }
-
-    const status = getProductStatus(stock);
-    const now = new Date();
-
-    if (editingProduct) {
-      setProducts(prev =>
-        prev.map(p => p.id === editingProduct.id
-          ? { ...p, name: name.trim(), price, stock, status, category, lastUpdated: now }
-          : p
-        )
-      );
-    } else {
-      const newProduct: Product = { id: Date.now().toString(), name: name.trim(), price, stock, status, category, lastUpdated: now };
-      setProducts(prev => [...prev, newProduct]);
-    }
-
-    closeModal();
-  }, [editingProduct, getProductStatus, closeModal]);
-
+  // ---------- Filter & Sort ----------
   const filteredAndSortedProducts = useMemo(() => {
-    let filtered = products.filter(p =>
-      p.name.toLowerCase().includes(searchText.toLowerCase()) ||
-      (p.category && p.category.toLowerCase().includes(searchText.toLowerCase()))
+    const filtered = products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        (p.category && p.category.toLowerCase().includes(searchText.toLowerCase()))
     );
-    return filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'name': return a.name.localeCompare(b.name);
-        case 'stock': return b.stock - a.stock;
-        case 'price': return b.price - a.price;
-        default: return 0;
-      }
-    });
+
+    switch (sortBy) {
+      case "name":
+        return filtered.sort((a, b) => a.name.localeCompare(b.name));
+      case "stock":
+        return filtered.sort((a, b) => b.stock - a.stock);
+      case "price":
+        return filtered.sort((a, b) => b.price - a.price);
+      default:
+        return filtered;
+    }
   }, [products, searchText, sortBy]);
 
+  // ---------- Stats ----------
   const inventoryStats = useMemo(() => {
     const total = products.length;
-    const inStock = products.filter(p => p.status === "In stock").length;
-    const lowStock = products.filter(p => p.status === "Low stock").length;
-    const outOfStock = products.filter(p => p.status === "Out of stock").length;
+    const inStock = products.filter((p) => p.status === "In stock").length;
+    const lowStock = products.filter((p) => p.status === "Low stock").length;
+    const outOfStock = products.filter((p) => p.status === "Out of stock").length;
     return { total, inStock, lowStock, outOfStock };
   }, [products]);
 
-  const renderItem = useCallback(({ item }: { item: Product }) => (
-    <ProductItem product={item} onEdit={editProduct} onDelete={deleteProduct} />
-  ), [editProduct, deleteProduct]);
+  const renderItem = useCallback(
+    ({ item }: { item: Product }) => (
+      <ProductItem product={item} onEdit={openEditModal} onDelete={confirmDelete} />
+    ),
+    []
+  );
 
+  // ---------- List Header ----------
   const ListHeaderComponent = useMemo(() => (
     <>
       <View style={styles.header}>
@@ -166,90 +239,78 @@ export default function Inventory() {
 
       <SearchBar placeholder="Search products or categories..." onSearch={setSearchText} />
 
-      <View style={styles.actionRow}>
-        <View style={styles.sortContainer}>
-          <Text style={styles.sortLabel}>Sort by:</Text>
-          {['name','stock','price'].map((key) => (
-            <TouchableOpacity
-              key={key}
-              style={[styles.sortButton, sortBy === key && styles.activeSortButton]}
-              onPress={() => setSortBy(key as 'name' | 'stock' | 'price')}
+      <View style={styles.sortContainer}>
+        {(["name", "stock", "price"] as const).map((key) => (
+          <TouchableOpacity
+            key={key}
+            style={[styles.sortButton, sortBy === key && styles.activeSortButton]}
+            onPress={() => setSortBy(key)}
+          >
+            <Text
+              style={[styles.sortButtonText, sortBy === key && styles.activeSortText]}
             >
-              <Text style={[styles.sortButtonText, sortBy === key && styles.activeSortText]}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              {key.charAt(0).toUpperCase() + key.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
-        <Ionicons name="add-circle" size={24} color="#fff" />
-        <Text style={styles.addText}>Add New Product</Text>
+        <Text style={styles.addText}>+ Add New Product</Text>
       </TouchableOpacity>
 
-      <View style={styles.listHeaderSpacer} />
+      <View style={{ height: vs(20) }} />
     </>
-  ), [inventoryStats, sortBy, openAddModal]);
-
-  const ListEmptyComponent = useMemo(() => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="cube-outline" size={64} color="#ccc" />
-      <Text style={styles.emptyTitle}>No Products Found</Text>
-      <Text style={styles.emptySubtitle}>
-        {searchText ? "Try adjusting your search" : "Add your first product to get started"}
-      </Text>
-    </View>
-  ), [searchText]);
+  ), [inventoryStats, sortBy]);
 
   return (
-    <>
+    <GestureHandlerRootView style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#f8f9fa" />
-      <GestureHandlerRootView style={styles.container}>
+
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 20 }} size="large" />
+      ) : (
         <FlatList
           ref={flatListRef}
           data={filteredAndSortedProducts}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={styles.list}
           ListHeaderComponent={ListHeaderComponent}
-          ListEmptyComponent={ListEmptyComponent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         />
+      )}
 
-        <ProductModal
-          visible={modalVisible}
-          product={editingProduct}
-          onSave={saveProduct}
-          onClose={closeModal}
-        />
-      </GestureHandlerRootView>
-    </>
+      <ProductModal
+        visible={modalVisible}
+        product={editingProduct}
+        onSave={saveProduct}
+        onClose={closeModal}
+      />
+    </GestureHandlerRootView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8f9fa" },
-  listContent: { paddingHorizontal: s(16), paddingVertical: vs(20), paddingBottom: vs(100) },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: vs(20), marginTop: vs(20) },
-  headerSubTitle: { fontSize: s(18), fontWeight: "600", color: "#6c757d", letterSpacing: 0.5 },
+  root: { flex: 1, backgroundColor: "#f8f9fa" },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: vs(20), marginBottom: vs(16), paddingHorizontal: s(16) },
+  headerSubTitle: { fontSize: s(18), fontWeight: "600", color: "#6c757d" },
   headerTitle: { fontSize: s(32), fontWeight: "800", color: "#1a6a37", letterSpacing: -0.5 },
-  statsContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: vs(20), gap: s(12) },
-  statCard: { flex: 1, backgroundColor: "#fff", padding: s(16), borderRadius: ms(12), alignItems: "center", elevation: 2, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
+  statsContainer: { flexDirection: "row", justifyContent: "space-between", marginHorizontal: s(16), marginBottom: vs(16), gap: s(12) },
+  statCard: { flex: 1, backgroundColor: "#fff", padding: s(16), borderRadius: ms(12), alignItems: "center", elevation: 2 },
   lowStockCard: { backgroundColor: "#fff3cd", borderLeftWidth: 4, borderLeftColor: "#ffc107" },
   outOfStockCard: { backgroundColor: "#f8d7da", borderLeftWidth: 4, borderLeftColor: "#dc3545" },
   statNumber: { fontSize: ms(24), fontWeight: "800", color: "#1a6a37", marginBottom: vs(4) },
   statLabel: { fontSize: ms(12), color: "#6c757d", fontWeight: "600", textAlign: "center" },
-  actionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: vs(16) },
-  sortContainer: { marginTop: 20, flexDirection: "row", alignItems: "center", flex: 1 },
-  sortLabel: { fontSize: ms(14), color: "#6c757d", fontWeight: "600", marginRight: s(8) },
-  sortButton: { paddingHorizontal: s(12), paddingVertical: vs(6), borderRadius: ms(16), backgroundColor: "#e9ecef", marginRight: s(8) },
-  activeSortButton: { backgroundColor: "#1a6a37" },
+  sortContainer: { flexDirection: "row", justifyContent: "center", marginVertical: vs(8) },
+  sortButton: { paddingHorizontal: s(12), paddingVertical: vs(6), borderWidth: 1, borderColor: "#ccc", borderRadius: ms(16), marginHorizontal: s(4) },
+  activeSortButton: { backgroundColor: "#1a6a37", borderColor: "#1a6a37" },
   sortButtonText: { fontSize: ms(12), color: "#6c757d", fontWeight: "600" },
   activeSortText: { color: "#fff" },
-  addButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#1a6a37", paddingVertical: vs(14), paddingHorizontal: s(20), borderRadius: ms(12), justifyContent: "center", elevation: 3, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
-  addText: { color: "#fff", fontWeight: "700", fontSize: ms(16), marginLeft: s(8) },
-  listHeaderSpacer: { height: vs(20) },
-  emptyContainer: { alignItems: "center", paddingVertical: vs(60) },
-  emptyTitle: { fontSize: ms(20), fontWeight: "600", color: "#6c757d", marginTop: vs(16), marginBottom: vs(8) },
-  emptySubtitle: { fontSize: ms(14), color: "#adb5bd", textAlign: "center", lineHeight: ms(20) },
+  addButton: { marginHorizontal: s(16), backgroundColor: "#1a6a37", paddingVertical: vs(14), borderRadius: ms(12), justifyContent: "center", alignItems: "center", marginBottom: vs(16) },
+  addText: { color: "#fff", fontWeight: "700", fontSize: ms(16) },
+  list: { paddingHorizontal: s(12), paddingBottom: vs(50) },
 });
+
+export default Inventory;

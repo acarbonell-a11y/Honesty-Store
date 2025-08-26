@@ -33,7 +33,7 @@ export default function PaymentModal({
   visible,
   transaction,
   onClose,
-  onUpdatePayment,
+  onUpdatePayment, // Correctly use the prop
 }: PaymentModalProps) {
   const [amountPaid, setAmountPaid] = useState("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<Transaction['paymentMethod']>("Cash");
@@ -87,6 +87,7 @@ export default function PaymentModal({
         {
           text: "Update",
           onPress: () => {
+            // Call the prop instead of a local function
             onUpdatePayment(transaction.id, status, amount, selectedPaymentMethod);
             onClose();
           },
@@ -99,7 +100,6 @@ export default function PaymentModal({
     setAmountPaid(amount.toString());
   };
 
-  // Fixed: Use correct Ionicons names
   const getPaymentMethodIcon = (method: Transaction['paymentMethod']): keyof typeof Ionicons.glyphMap => {
     switch (method) {
       case "Cash": return "cash-outline";
