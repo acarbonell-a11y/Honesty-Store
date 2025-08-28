@@ -19,7 +19,7 @@ export default function LoginScreen() {
       router.replace("/(main)/(adminVIEW)/(admin)/dashboard"); // 👈 admin route
     } else {
       Alert.alert("Success", "Welcome back!");
-      router.replace("/(main)/homepage");
+      router.replace("/(main)/(user)/homepage");
     }
   } else {
     Alert.alert("Error", "Invalid email or password");
