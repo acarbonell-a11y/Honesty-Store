@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { AdminTransaction as Transaction } from 'functions/types'; // adjust path
 import React from "react";
 import {
   Dimensions,
@@ -10,7 +11,6 @@ import {
   View,
 } from "react-native";
 import { ms, s, vs } from "react-native-size-matters";
-import { Transaction } from "../(admin)/transactions";
 
 interface ReceiptModalProps {
   visible: boolean;
@@ -37,7 +37,7 @@ export default function ReceiptModal({
       day: 'numeric',
     });
   };
-``
+
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
@@ -82,7 +82,7 @@ export default function ReceiptModal({
             {/* Items List */}
             <View style={styles.itemsSection}>
               <Text style={styles.sectionTitle}>Items Purchased</Text>
-              {transaction.items.map((item, index) => (
+              {transaction.items.map((item: { id: React.Key | null | undefined; name: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; quantity: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; price: number; total: number; }, index: any) => (
                 <View key={item.id} style={styles.itemRow}>
                   <View style={styles.itemInfo}>
                     <Text style={styles.itemName}>{item.name}</Text>

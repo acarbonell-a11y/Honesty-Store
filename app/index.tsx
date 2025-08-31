@@ -16,7 +16,7 @@ export default function WelcomeScreen() {
 
       {/* ✅ Go to login */}
       <Link href="/(auth)/login" asChild>
-        <TouchableOpacity className="px-24 py-4 rounded-2xl bg-pink-500">
+        <TouchableOpacity className="px-24 py-4 rounded-2xl bg-pink-500 mb-4">
           <Text className="text-white text-lg font-semibold">SIGN IN</Text>
         </TouchableOpacity>
       </Link>

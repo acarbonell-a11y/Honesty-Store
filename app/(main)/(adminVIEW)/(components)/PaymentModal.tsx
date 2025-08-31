@@ -1,4 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import { getInventoryItem, updateInventoryItem } from "functions/firebaseFunctions"; // Inventory functions
+import { AdminTransaction as Transaction, TransactionItemTypeDeduct } from "functions/types";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -13,7 +15,6 @@ import {
   View,
 } from "react-native";
 import { ms, s, vs } from "react-native-size-matters";
-import { Transaction } from "../(admin)/transactions";
 
 interface PaymentModalProps {
   visible: boolean;
@@ -27,13 +28,13 @@ interface PaymentModalProps {
   ) => void;
 }
 
-const PAYMENT_METHODS: Transaction['paymentMethod'][] = ["Cash", "Card", "Digital Wallet"];
+const PAYMENT_METHODS: Transaction['paymentMethod'][] = ["Cash", "Digital Wallet"];
 
 export default function PaymentModal({
   visible,
   transaction,
   onClose,
-  onUpdatePayment, // Correctly use the prop
+  onUpdatePayment,
 }: PaymentModalProps) {
   const [amountPaid, setAmountPaid] = useState("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<Transaction['paymentMethod']>("Cash");
@@ -65,36 +66,77 @@ export default function PaymentModal({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleUpdatePayment = () => {
-    if (!validateForm()) return;
+// Deduct stock for each item in the transaction
+const deductStock = async () => {
+  if (!transaction?.items || transaction.items.length === 0) return;
 
-    const amount = parseFloat(amountPaid);
-    let status: Transaction['paymentStatus'];
+  try {
+    for (const item of transaction.items as (TransactionItemTypeDeduct & { stockDeducted?: boolean })[]) {
+      if (item.stockDeducted) continue;
 
-    if (amount >= transaction.total) {
-      status = "Paid";
-    } else if (amount > 0) {
-      status = "Partially Paid";
-    } else {
-      status = "Unpaid";
+      const inventoryId: string =
+        typeof item.id === "string"
+          ? item.id
+          : item.id && typeof item.id.id === "string"
+          ? item.id.id
+          : "";
+
+      if (!inventoryId) {
+        console.warn("Skipping item with missing inventory reference:", item);
+        continue;
+      }
+
+      const inventoryItem = await getInventoryItem(inventoryId);
+      if (!inventoryItem) continue;
+
+      const newQuantity = inventoryItem.quantity - item.quantity;
+      if (newQuantity < 0) continue;
+
+      await updateInventoryItem(inventoryId, { quantity: newQuantity });
+      (item as any).stockDeducted = true;
     }
+  } catch (error) {
+    console.error("Failed to deduct stock:", error);
+  }
+};
 
-    Alert.alert(
-      "Update Payment",
-      `Update payment to ₱${amount.toFixed(2)}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Update",
-          onPress: () => {
-            // Call the prop instead of a local function
-            onUpdatePayment(transaction.id, status, amount, selectedPaymentMethod);
-            onClose();
-          },
+ const handleUpdatePayment = () => {
+  if (!validateForm()) return;
+
+  const amount = parseFloat(amountPaid);
+  let newStatus: Transaction['paymentStatus'];
+
+  if (amount >= transaction.total) {
+    newStatus = "Paid";
+  } else if (amount > 0) {
+    newStatus = "Partially Paid";
+  } else {
+    newStatus = "Unpaid";
+  }
+
+  Alert.alert(
+    "Update Payment",
+    `Update payment to ₱${amount.toFixed(2)}?`,
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Update",
+        onPress: async () => {
+          // Deduct stock only if status changes from "Unpaid" to Paid/Partially Paid
+          const wasUnpaid = transaction.paymentStatus === "Unpaid" || transaction.paymentStatus === "Pending";
+          const willBePaidOrPartial = newStatus === "Paid" || newStatus === "Partially Paid";
+
+          if (wasUnpaid) {
+            await deductStock();
+          }
+
+          onUpdatePayment(transaction.id, newStatus, amount, selectedPaymentMethod);
+          onClose();
         },
-      ]
-    );
-  };
+      },
+    ]
+  );
+};
 
   const handleQuickAmount = (amount: number) => {
     setAmountPaid(amount.toString());
@@ -103,7 +145,6 @@ export default function PaymentModal({
   const getPaymentMethodIcon = (method: Transaction['paymentMethod']): keyof typeof Ionicons.glyphMap => {
     switch (method) {
       case "Cash": return "cash-outline";
-      case "Card": return "card-outline";
       case "Digital Wallet": return "phone-portrait-outline";
       default: return "wallet-outline";
     }
@@ -271,243 +312,46 @@ export default function PaymentModal({
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: ms(20),
-    borderTopRightRadius: ms(20),
-    maxHeight: "90%",
-    paddingBottom: vs(20),
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: s(20),
-    paddingVertical: vs(20),
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  modalTitle: {
-    fontSize: ms(20),
-    fontWeight: "700",
-    color: "#212529",
-  },
-  closeButton: {
-    padding: s(4),
-  },
-  formContainer: {
-    paddingHorizontal: s(20),
-    paddingTop: vs(20),
-  },
-  summaryContainer: {
-    backgroundColor: "#f8f9fa",
-    padding: s(16),
-    borderRadius: ms(12),
-    marginBottom: vs(20),
-  },
-  receiptNumber: {
-    fontSize: ms(18),
-    fontWeight: "700",
-    color: "#1a6a37",
-    marginBottom: vs(12),
-    textAlign: "center",
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: vs(8),
-  },
-  summaryLabel: {
-    fontSize: ms(14),
-    color: "#6c757d",
-  },
-  summaryValue: {
-    fontSize: ms(14),
-    fontWeight: "600",
-    color: "#212529",
-  },
-  remainingRow: {
-    paddingTop: vs(8),
-    borderTopWidth: 1,
-    borderTopColor: "#dee2e6",
-    marginTop: vs(4),
-  },
-  remainingLabel: {
-    fontSize: ms(14),
-    fontWeight: "600",
-    color: "#dc3545",
-  },
-  remainingValue: {
-    fontSize: ms(16),
-    fontWeight: "700",
-    color: "#dc3545",
-  },
-  quickAmountContainer: {
-    marginBottom: vs(20),
-  },
-  sectionTitle: {
-    fontSize: ms(16),
-    fontWeight: "600",
-    color: "#212529",
-    marginBottom: vs(12),
-  },
-  quickAmountButtons: {
-    flexDirection: "row",
-    gap: s(12),
-  },
-  quickAmountButton: {
-    flex: 1,
-    backgroundColor: "#e9ecef",
-    padding: s(12),
-    borderRadius: ms(8),
-    alignItems: "center",
-  },
-  quickAmountText: {
-    fontSize: ms(12),
-    color: "#6c757d",
-    marginBottom: vs(4),
-  },
-  quickAmountValue: {
-    fontSize: ms(14),
-    fontWeight: "700",
-    color: "#1a6a37",
-  },
-  inputGroup: {
-    marginBottom: vs(20),
-  },
-  inputLabel: {
-    fontSize: ms(14),
-    fontWeight: "600",
-    color: "#495057",
-    marginBottom: vs(8),
-  },
-  amountInputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#dee2e6",
-    borderRadius: ms(8),
-    backgroundColor: "#f8f9fa",
-  },
-  currencySymbol: {
-    fontSize: ms(18),
-    fontWeight: "600",
-    color: "#1a6a37",
-    paddingLeft: s(12),
-  },
-  amountInput: {
-    flex: 1,
-    paddingHorizontal: s(12),
-    paddingVertical: vs(12),
-    fontSize: ms(18),
-    fontWeight: "600",
-    color: "#212529",
-  },
-  inputError: {
-    borderColor: "#dc3545",
-  },
-  errorText: {
-    fontSize: ms(12),
-    color: "#dc3545",
-    marginTop: vs(4),
-  },
-  paymentMethodContainer: {
-    flexDirection: "row",
-    gap: s(8),
-  },
-  paymentMethodButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: vs(12),
-    paddingHorizontal: s(8),
-    borderRadius: ms(8),
-    backgroundColor: "#e9ecef",
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  selectedPaymentMethod: {
-    backgroundColor: "#1a6a37",
-    borderColor: "#1a6a37",
-  },
-  paymentMethodText: {
-    fontSize: ms(12),
-    color: "#6c757d",
-    fontWeight: "600",
-    marginLeft: s(4),
-  },
-  selectedPaymentMethodText: {
-    color: "#fff",
-  },
-  statusPreview: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#f8f9fa",
-    padding: s(12),
-    borderRadius: ms(8),
-    marginBottom: vs(20),
-  },
-  statusPreviewLabel: {
-    fontSize: ms(14),
-    fontWeight: "600",
-    color: "#495057",
-  },
-  statusPreviewContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: s(12),
-    paddingVertical: vs(6),
-    borderRadius: ms(16),
-  },
-  statusBadgeText: {
-    fontSize: ms(12),
-    fontWeight: "600",
-    color: "#fff",
-    marginLeft: s(4),
-  },
-  buttonContainer: {
-    flexDirection: "row",
-    paddingHorizontal: s(20),
-    paddingTop: vs(20),
-    gap: s(12),
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: vs(14),
-    borderRadius: ms(8),
-    backgroundColor: "#6c757d",
-    alignItems: "center",
-  },
-  cancelButtonText: {
-    color: "#fff",
-    fontSize: ms(16),
-    fontWeight: "600",
-  },
-  updateButton: {
-    flex: 2,
-    flexDirection: "row",
-    paddingVertical: vs(14),
-    borderRadius: ms(8),
-    backgroundColor: "#1a6a37",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  updateButtonText: {
-    color: "#fff",
-    fontSize: ms(16),
-    fontWeight: "600",
-    marginLeft: s(4),
-  },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.6)", justifyContent: "flex-end" },
+  modalContent: { backgroundColor: "#fff", borderTopLeftRadius: ms(20), borderTopRightRadius: ms(20), maxHeight: "90%", paddingBottom: vs(20) },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: s(20), paddingVertical: vs(20), borderBottomWidth: 1, borderBottomColor: "#f0f0f0" },
+  modalTitle: { fontSize: ms(20), fontWeight: "700", color: "#212529" },
+  closeButton: { padding: s(4) },
+  formContainer: { paddingHorizontal: s(20), paddingTop: vs(20) },
+  summaryContainer: { backgroundColor: "#f8f9fa", padding: s(16), borderRadius: ms(12), marginBottom: vs(20) },
+  receiptNumber: { fontSize: ms(18), fontWeight: "700", color: "#1a6a37", marginBottom: vs(12), textAlign: "center" },
+  summaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: vs(8) },
+  summaryLabel: { fontSize: ms(14), color: "#6c757d" },
+  summaryValue: { fontSize: ms(14), fontWeight: "600", color: "#212529" },
+  remainingRow: { paddingTop: vs(8), borderTopWidth: 1, borderTopColor: "#dee2e6", marginTop: vs(4) },
+  remainingLabel: { fontSize: ms(14), fontWeight: "600", color: "#dc3545" },
+  remainingValue: { fontSize: ms(16), fontWeight: "700", color: "#dc3545" },
+  quickAmountContainer: { marginBottom: vs(20) },
+  sectionTitle: { fontSize: ms(16), fontWeight: "600", color: "#212529", marginBottom: vs(12) },
+  quickAmountButtons: { flexDirection: "row", gap: s(12) },
+  quickAmountButton: { flex: 1, backgroundColor: "#e9ecef", padding: s(12), borderRadius: ms(8), alignItems: "center" },
+  quickAmountText: { fontSize: ms(12), color: "#6c757d", marginBottom: vs(4) },
+  quickAmountValue: { fontSize: ms(14), fontWeight: "700", color: "#1a6a37" },
+  inputGroup: { marginBottom: vs(20) },
+  inputLabel: { fontSize: ms(14), fontWeight: "600", color: "#495057", marginBottom: vs(8) },
+  amountInputContainer: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#dee2e6", borderRadius: ms(8), backgroundColor: "#f8f9fa" },
+  currencySymbol: { fontSize: ms(18), fontWeight: "600", color: "#1a6a37", paddingLeft: s(12) },
+  amountInput: { flex: 1, paddingHorizontal: s(12), paddingVertical: vs(12), fontSize: ms(18), fontWeight: "600", color: "#212529" },
+  inputError: { borderColor: "#dc3545" },
+  errorText: { fontSize: ms(12), color: "#dc3545", marginTop: vs(4) },
+  paymentMethodContainer: { flexDirection: "row", gap: s(8) },
+  paymentMethodButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: vs(12), paddingHorizontal: s(8), borderRadius: ms(8), backgroundColor: "#e9ecef", borderWidth: 2, borderColor: "transparent" },
+  selectedPaymentMethod: { backgroundColor: "#1a6a37", borderColor: "#1a6a37" },
+  paymentMethodText: { fontSize: ms(12), color: "#6c757d", fontWeight: "600", marginLeft: s(4) },
+  selectedPaymentMethodText: { color: "#fff" },
+  statusPreview: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#f8f9fa", padding: s(12), borderRadius: ms(8), marginBottom: vs(20) },
+  statusPreviewLabel: { fontSize: ms(14), fontWeight: "600", color: "#495057" },
+  statusPreviewContainer: { flexDirection: "row", alignItems: "center" },
+  statusBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: s(12), paddingVertical: vs(6), borderRadius: ms(16) },
+  statusBadgeText: { fontSize: ms(12), fontWeight: "600", color: "#fff", marginLeft: s(4) },
+  buttonContainer: { flexDirection: "row", paddingHorizontal: s(20), paddingTop: vs(20), gap: s(12) },
+  cancelButton: { flex: 1, paddingVertical: vs(14), borderRadius: ms(8), backgroundColor: "#6c757d", alignItems: "center" },
+  cancelButtonText: { color: "#fff", fontSize: ms(16), fontWeight: "600" },
+  updateButton: { flex: 2, flexDirection: "row", paddingVertical: vs(14), borderRadius: ms(8), backgroundColor: "#1a6a37", alignItems: "center", justifyContent: "center" },
+  updateButtonText: { color: "#fff", fontSize: ms(16), fontWeight: "600", marginLeft: s(4) },
 });

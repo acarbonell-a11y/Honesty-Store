@@ -58,7 +58,14 @@ export type Transaction = {
     priceAtTimeOfSale: number;
   }[];
   userId: string;
+
+  // New fields for your Bill UI
+  receiptNumber: string;
+  amountPaid: number;
+  date: any; // Firestore timestamp
+  paymentStatus: "Paid" | "Pending";
 };
+
 
 /**
  * INVENTORY FUNCTIONS
@@ -148,17 +155,9 @@ export const getTransactionsForUser = async (
   userId: string
 ): Promise<(Transaction & { id: string })[]> => {
   try {
-    // Get yesterday's date
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    // Optional: reset time to midnight to include all of yesterday
-    yesterday.setHours(0, 0, 0, 0);
-
-    // Query for transactions by user and date >= yesterday
     const q = query(
       transactionsCollection,
-      where("userId", "==", userId),
-      where("date", ">=", yesterday)
+      where("userId", "==", userId)
     );
 
     const snapshot = await getDocs(q);
@@ -168,10 +167,11 @@ export const getTransactionsForUser = async (
       ...(doc.data() as Transaction),
     }));
   } catch (error) {
-    console.error("Error getting user transactions: ", error);
+    console.error("Error getting user transactions:", error);
     return [];
   }
 };
+
 
 export const getLatestTransaction = async (): Promise<(Transaction & { id: string }) | null> => {
   try {
@@ -206,3 +206,32 @@ export const getAllTransactions = async (): Promise<(Transaction & { id: string 
     return [];
   }
 };
+//for specific user Transactions
+export const getUserTransactions = async (uid: string) => {
+  const q = query(collection(db, "transactions"), where("userId", "==", uid));
+  const querySnapshot = await getDocs(q);
+  const transactions: any[] = [];
+  querySnapshot.forEach((doc) => {
+    transactions.push({ id: doc.id, ...doc.data() });
+  });
+  return transactions;
+};
+
+//BackupGetUser:
+export const getUserProfileFireBase = async (uid: string) => {
+  try {
+    const docRef = doc(db, "users", uid); // users collection
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data(); // { name: string, email: string, ... }
+    } else {
+      return null;
+    }
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    return null;
+  }
+};
+
+export { db };
+

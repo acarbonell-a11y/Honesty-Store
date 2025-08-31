@@ -1,17 +1,26 @@
 export interface TransactionItemType {
-  id?: string;
+  id: string ;
   name: string;
   quantity: number;
   price: number;
   total: number;
 }
 
-export type PaymentStatus = "Paid" | "Partially Paid" | "Unpaid";
-export type PaymentMethod = "Cash" | "Card" | "Digital Wallet";
+export type TransactionItemTypeDeduct = {
+  id: string | { id: string };
+  name: string;
+  quantity: number;
+  price: number;
+  total: number;
+};
+
+
+export type PaymentStatus = "Paid" | "Partially Paid" | "Unpaid" | "Pending";
+export type PaymentMethod = "Cash" | "Digital Wallet";
 
 // Admin view transaction (id optional)
 export interface AdminTransaction {
-  id?: string; // optional in admin view
+  id: string; // optional in admin view
   receiptNumber: string;
   date: Date;
   customerName?: string;
@@ -24,3 +33,4 @@ export interface AdminTransaction {
   paymentMethod?: PaymentMethod;
   notes?: string;
 }
+

@@ -1,8 +1,8 @@
 // app/screens/Inventory.tsx
-import Avatar from "components/Avatar";
-import ProductItem from "components/ProductItem";
-import ProductModal from "components/ProductModal";
-import SearchBar from "components/SearchBar";
+import Avatar from "app/(main)/(adminVIEW)/(components)/Avatar";
+import ProductItem from "app/(main)/(adminVIEW)/(components)/ProductItem";
+import ProductModal from "app/(main)/(adminVIEW)/(components)/ProductModal";
+import SearchBar from "app/(main)/(adminVIEW)/(components)/SearchBar";
 import { db } from "config/firebaseConfig";
 import {
   Timestamp,
@@ -122,6 +122,7 @@ const Inventory: React.FC = () => {
           lowStockThreshold: lowStockThreshold ?? null,
           status: nextStatus,
           lastUpdated: serverTimestamp(),
+          createdAt: serverTimestamp(),
         });
       } else {
         await addDoc(inventoryRef, {
@@ -132,6 +133,7 @@ const Inventory: React.FC = () => {
           lowStockThreshold: lowStockThreshold ?? LOW_STOCK_FALLBACK,
           status: nextStatus,
           lastUpdated: serverTimestamp(),
+          createdAt: serverTimestamp()
         });
       }
 

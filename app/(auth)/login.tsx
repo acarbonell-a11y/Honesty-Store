@@ -19,25 +19,22 @@ export default function LoginScreen() {
       router.replace("/(main)/(adminVIEW)/(admin)/dashboard"); // 👈 admin route
     } else {
       Alert.alert("Success", "Welcome back!");
-      router.replace("/(main)/homepage");
+      router.replace("/(main)/(users)/(usersMain)/Homepage");
     }
   } else {
     Alert.alert("Error", "Invalid email or password");
   }
 };
 
-  // Google Sign-in Hook:
-const { request, signIn, response } = useGoogleAuthAlpha();
-
-useEffect(() => {
-  
-  if (response?.type === 'success') {
-    console.log("Signed in, navigating based on role...");
-    // The hook already handles Firestore user creation and routing
-    // So you could even remove this navigation if you rely on hook
-  }
-}, [response, router]);
-
+  //Google Sign-in Hook:
+  const { request, promptAsync, response } = useGoogleAuthAlpha();
+  useEffect(() => {
+    if(response?.type === 'success')
+    {
+      console.log("Signed in, navigating to homepage...");
+      router.replace("/(main)/homepage");
+    }
+  },[response,router]);
   
   return (
     <View className="flex-1 bg-dark px-6 justify-center">
@@ -92,7 +89,7 @@ useEffect(() => {
   <Button
     title="Sign in with Google"
     disabled={!request}
-    onPress={signIn}
+    onPress={() => promptAsync()}
   />
 </View>
 

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { AdminTransaction } from "app/(main)/(adminVIEW)/(admin)/transactions";
+import { AdminTransaction } from 'functions/types'; // adjust path
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { ms, s, vs } from "react-native-size-matters";

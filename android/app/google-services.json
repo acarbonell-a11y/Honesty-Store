@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "688642102325",
+    "project_id": "shopnestyapp",
+    "storage_bucket": "shopnestyapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:688642102325:android:683e07180b5b18f7998d7c",
+        "android_client_info": {
+          "package_name": "com.expomaglunsod.honestystore"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "688642102325-38pe79m1ufdtsleqjs8deeo7oule0atl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.expomaglunsod.honestystore",
+            "certificate_hash": "074e4eb0e7c29eb32d0f2587a20690f6bb105447"
+          }
+        },
+        {
+          "client_id": "688642102325-8ggre5ts31ic8kejd41d0svq65k76l89.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCRNeVX4i--jPlxEpxHFJw_iyYaxgV8q7c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "688642102325-8ggre5ts31ic8kejd41d0svq65k76l89.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "688642102325-i2hfo5plhgq0ad5ieuva90epltghq5dc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.expoMaglunsod.honestystore"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
