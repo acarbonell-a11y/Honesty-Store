@@ -62,7 +62,7 @@ const Homepage = () => {
           id: docSnap.id,
           name: docSnap.data().name,
           price: docSnap.data().price.toString(),
-          image: docSnap.data().image || undefined,
+          image: docSnap.data().imageUrl || undefined,
           category: docSnap.data().category,
           quantity: docSnap.data().quantity,
         }));
@@ -207,7 +207,7 @@ const Homepage = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Shopnesty</Text>
         <View style={styles.iconContainer}>
-          {renderIcon("notifications-outline", 5, scaleLeft, () =>
+          {renderIcon("notifications-outline", 0, scaleLeft, () =>
             router.push("/(main)/(users)/(userHidComps)/NotifacationScreen")
           )}
           {renderIcon("cart-outline", 0, scaleRight, () =>

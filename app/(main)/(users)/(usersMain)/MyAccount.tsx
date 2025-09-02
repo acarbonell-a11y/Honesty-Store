@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { auth } from "config/firebaseConfig";
+import { router } from "expo-router";
 import { getUserProfileFireBase, getUserTransactions } from "functions/firebaseFunctions"; // import Firestore functions
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -119,7 +120,8 @@ const ProfileScreen = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Profile</Text>
-        {renderIcon("settings-outline", scaleRight, () => console.log("Go to Settings"))}
+        {renderIcon("settings-outline", scaleRight, () =>
+            router.push('/(main)/(users)/(userHidComps)/Settings'))}
       </View>
 
       {/* Profile Info */}

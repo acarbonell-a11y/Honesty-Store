@@ -15,7 +15,6 @@ import {
 import { s, vs } from "react-native-size-matters";
 import Avatar from "../(components)/Avatar";
 import Card from "../(components)/Card";
-import Card2 from "../(components)/Card2";
 import Popup from "../(components)/Popup";
 
 export default function Dashboard() {
@@ -149,67 +148,65 @@ export default function Dashboard() {
           <Avatar />
         </View>
 
+        {/* Total Transactions */}
         <TouchableOpacity activeOpacity={0.8}>
           <Card
             title="Total Transactions"
             value={allTransactions.length ?? 0}
             subtitle="All Users"
-            icon="swap-horizontal"
-            iconColor="#e1b61c"
-            trend="+15% from last month"
-            description="Transactions are growing steadily."
+            icon="cash-outline"
+            iconColor="#217230"
+            description=""
           />
         </TouchableOpacity>
 
-        <View style={styles.gridContainer}>
-          <View style={styles.gridRow}>
-            <TouchableOpacity style={styles.cardWrapper} onPress={() => openModal("bestSelling")}>
-              <Card2
-                title="Best Selling"
-                value={modalData.bestSelling?.data.length || 0}
-                icon="pricetag"
-                iconColor="#1a6a37"
-                backgroundColor="#eafaf1"
-                info="Top products"
-              />
-            </TouchableOpacity>
+        {/* Best Selling */}
+        <TouchableOpacity activeOpacity={0.8} onPress={() => openModal("bestSelling")}>
+          <Card
+            title="Best Selling"
+            value={modalData.bestSelling?.data.length || 0}
+            subtitle="Top products"
+            icon="pricetag"
+            iconColor="#1a6a37"
+            description="Browse best selling items."
+          />
+        </TouchableOpacity>
 
-            <TouchableOpacity style={styles.cardWrapper} onPress={() => openModal("receipts")}>
-              <Card2
-                title="Receipts"
-                value={modalData.receipts?.data.length || 0}
-                icon="receipt"
-                iconColor="#f9a514"
-                backgroundColor="#fff8e1"
-                info="Recent receipts"
-              />
-            </TouchableOpacity>
-          </View>
+        {/* Receipts */}
+        <TouchableOpacity activeOpacity={0.8} onPress={() => openModal("receipts")}>
+          <Card
+            title="Receipts"
+            value={modalData.receipts?.data.length || 0}
+            subtitle="Recent receipts"
+            icon="receipt"
+            iconColor="#f9a514"
+            description="View latest transactions."
+          />
+        </TouchableOpacity>
 
-          <View style={styles.gridRow}>
-            <TouchableOpacity style={styles.cardWrapper} onPress={() => openModal("lowStock")}>
-              <Card2
-                title="Low Stock"
-                value={modalData.lowStock?.data.length || 0}
-                icon="alert-circle"
-                iconColor="#e41818"
-                backgroundColor="#fdecea"
-                info="Check items"
-              />
-            </TouchableOpacity>
+        {/* Low Stock */}
+        <TouchableOpacity activeOpacity={0.8} onPress={() => openModal("lowStock")}>
+          <Card
+            title="Low Stock"
+            value={modalData.lowStock?.data.length || 0}
+            subtitle="Inventory"
+            icon="alert-circle"
+            iconColor="#e41818"
+            description="Items needing restock."
+          />
+        </TouchableOpacity>
 
-            <TouchableOpacity style={styles.cardWrapper} onPress={() => openModal("sales")}>
-              <Card2
-                title="Sales Revenue"
-                value={`₱${modalData.sales?.data[0]?.value ?? 0}`}
-                icon="trending-up"
-                iconColor="#fff"
-                backgroundColor="#5cb85c"
-                info="Performance"
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* Sales Revenue */}
+        <TouchableOpacity activeOpacity={0.8} onPress={() => openModal("sales")}>
+          <Card
+            title="Total Sales"
+            value={`₱${modalData.sales?.data[0]?.value ?? 0}`}
+            subtitle="Performance"
+            icon="trending-up"
+            iconColor="#5cb85c"
+            description="Monthly sales overview."
+          />
+        </TouchableOpacity>
       </ScrollView>
 
       {renderModal()}
@@ -219,11 +216,28 @@ export default function Dashboard() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8f9fa" },
-  scrollContent: { paddingHorizontal: s(16), paddingVertical: vs(20), paddingBottom: vs(40) },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: vs(8), marginTop: vs(20) },
-  headerSubTitle: { fontSize: s(18), fontWeight: "600", color: "#6c757d", letterSpacing: 0.5 },
-  headerTitle: { fontSize: s(32), fontWeight: "800", color: "#1a6a37", letterSpacing: -0.5 },
-  gridContainer: { marginTop: vs(16) },
-  gridRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: vs(12), gap: s(12) },
-  cardWrapper: { flex: 1 },
+  scrollContent: {
+    paddingHorizontal: s(16),
+    paddingVertical: vs(20),
+    paddingBottom: vs(40),
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: vs(8),
+    marginTop: vs(20),
+  },
+  headerSubTitle: {
+    fontSize: s(18),
+    fontWeight: "600",
+    color: "#6c757d",
+    letterSpacing: 0.5,
+  },
+  headerTitle: {
+    fontSize: s(32),
+    fontWeight: "800",
+    color: "#1a6a37",
+    letterSpacing: -0.5,
+  },
 });

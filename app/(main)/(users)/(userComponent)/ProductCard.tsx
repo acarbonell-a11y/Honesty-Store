@@ -61,7 +61,17 @@ export default function ProductCard({
         onPressIn={() => Animated.spring(cardScale, { toValue: 0.97, useNativeDriver: true }).start()}
         onPressOut={() => Animated.spring(cardScale, { toValue: 1, useNativeDriver: true }).start()}
       >
-        <Animated.View style={[styles.card, { transform: [{ scale: cardScale }], width: cardWidth }]}>
+        <Animated.View
+          style={[
+            styles.card,
+            {
+              transform: [{ scale: cardScale }],
+              width: cardWidth,
+              borderWidth: stock === 0 ? 2 : 0,
+              borderColor: stock === 0 ? "red" : "transparent",
+            },
+          ]}
+        >
           <Image
             source={image ? { uri: image } : require("./image.png")}
             style={styles.image}
@@ -92,10 +102,16 @@ export default function ProductCard({
 
             <View style={styles.buttonRow}>
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: "#60d38aff" }]}
-                onPress={onAddToCart}
+                style={[
+                  styles.modalButton,
+                  { backgroundColor: stock === 0 ? "#ccc" : "#60d38aff" },
+                ]}
+                onPress={stock === 0 ? undefined : onAddToCart}
+                disabled={stock === 0}
               >
-                <Text style={styles.modalButtonText}>Add to Cart</Text>
+                <Text style={styles.modalButtonText}>
+                  {stock === 0 ? "Out of Stock" : "Add to Cart"}
+                </Text>
               </TouchableOpacity>
             </View>
 

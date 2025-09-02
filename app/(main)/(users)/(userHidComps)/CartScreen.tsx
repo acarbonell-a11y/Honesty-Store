@@ -34,7 +34,7 @@ import {
 type InventoryItem = {
   name: string;
   price: number | string;
-  image: string;
+  imageUrl: string;
   stock?: number;
 };
 
@@ -93,7 +93,7 @@ export default function CartScreen() {
             id: productId,
             name: prodData.name,
             price: coercePrice(prodData.price),
-            image: prodData.image,
+            image: prodData.imageUrl,
             qty: quantity,
             checked: false,
           });
@@ -136,7 +136,7 @@ export default function CartScreen() {
             id: productId,
             name: prodData.name,
             price: coercePrice(prodData.price),
-            image: prodData.image,
+            image: prodData.imageUrl,
             qty: quantity,
             checked: false,
           });

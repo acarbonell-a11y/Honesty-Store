@@ -1,56 +1,64 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useRef } from "react";
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Product } from "functions/types";
+import React from "react";
+import {
+  Animated,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
-import { ms, s, vs } from "react-native-size-matters";
-import { Product } from "../(admin)/inventory";
 
-interface ProductItemProps {
+type ProductCardProps = {
   product: Product;
-  onEdit: (product: Product) => void;
   onDelete: (id: string) => void;
-}
+  onEdit: (product: Product) => void;
+  onMore: (id: string) => void;
+};
 
-export default function ProductItem({ product, onEdit, onDelete }: ProductItemProps) {
-  const swipeableRef = useRef<Swipeable>(null);
-
-  const getStatusColor = (status: Product['status']) => {
-    switch (status) {
-      case "In stock": return "#28a745";
-      case "Low stock": return "#ffc107";
-      case "Out of stock": return "#dc3545";
-      default: return "#6c757d";
+const ProductCard: React.FC<ProductCardProps> = ({
+  product,
+  onDelete,
+  onEdit,
+  onMore,
+}) => {
+  // Map status → icon
+  const getStatusIcon = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "in stock":
+        return "checkmark-circle";
+      case "low stock":
+        return "warning";
+      case "out of stock":
+        return "close-circle";
+      default:
+        return "help-circle";
     }
   };
 
-  const getStatusIcon = (status: Product['status']) => {
-    switch (status) {
-      case "In stock": return "checkmark-circle";
-      case "Low stock": return "warning";
-      case "Out of stock": return "close-circle";
-      default: return "help-circle";
-    }
-  };
-
-  // Fixed: Added proper type annotation
+  // Right swipe actions (Delete)
   const renderRightActions = (
-    progress: Animated.AnimatedAddition<number>, 
-    dragX: Animated.AnimatedAddition<number>
+    _progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>
   ) => {
     const trans = dragX.interpolate({
       inputRange: [-100, -50, 0],
       outputRange: [0, 50, 100],
-      extrapolate: 'clamp',
+      extrapolate: "clamp",
     });
 
     return (
-      <Animated.View style={[styles.rightActions, { transform: [{ translateX: trans }] }]}>
+      <Animated.View
+        style={[
+          styles.actionContainer,
+          { transform: [{ translateX: trans }] },
+        ]}
+      >
         <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => {
-            swipeableRef.current?.close();
-            onDelete(product.id);
-          }}
+          style={[styles.actionButton, styles.deleteButton]}
+          onPress={() => onDelete(product.id)}
         >
           <Ionicons name="trash" size={20} color="#fff" />
           <Text style={styles.actionText}>Delete</Text>
@@ -59,25 +67,26 @@ export default function ProductItem({ product, onEdit, onDelete }: ProductItemPr
     );
   };
 
-  // Fixed: Added proper type annotation
+  // Left swipe actions (Edit)
   const renderLeftActions = (
-    progress: Animated.AnimatedAddition<number>, 
-    dragX: Animated.AnimatedAddition<number>
+    _progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>
   ) => {
     const trans = dragX.interpolate({
       inputRange: [0, 50, 100],
       outputRange: [0, 0, 0],
-      extrapolate: 'clamp',
     });
 
     return (
-      <Animated.View style={[styles.leftActions, { transform: [{ translateX: trans }] }]}>
+      <Animated.View
+        style={[
+          styles.actionContainer,
+          { transform: [{ translateX: trans }] },
+        ]}
+      >
         <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => {
-            swipeableRef.current?.close();
-            onEdit(product);
-          }}
+          style={[styles.actionButton, styles.editButton]}
+          onPress={() => onEdit(product)}
         >
           <Ionicons name="create" size={20} color="#fff" />
           <Text style={styles.actionText}>Edit</Text>
@@ -88,157 +97,146 @@ export default function ProductItem({ product, onEdit, onDelete }: ProductItemPr
 
   return (
     <Swipeable
-      ref={swipeableRef}
-      renderLeftActions={renderLeftActions}
       renderRightActions={renderRightActions}
-      leftThreshold={40}
-      rightThreshold={40}
+      renderLeftActions={renderLeftActions}
     >
-      <View style={styles.itemContainer}>
-        <View style={styles.itemContent}>
-          <View style={styles.itemHeader}>
-            <Text style={styles.itemName} numberOfLines={1}>
-              {product.name}
+      <View style={styles.card}>
+        {/* Product image */}
+        {product.imageUrl ? (
+          <Image source={{ uri: product.imageUrl }} style={styles.image} />
+        ) : (
+          <View style={[styles.image, styles.placeholder]}>
+            <Ionicons name="image" size={30} color="#ccc" />
+          </View>
+        )}
+
+        {/* Info */}
+        <View style={styles.info}>
+          <Text style={styles.title}>{product.name}</Text>
+          <Text style={styles.price}>{product.price}</Text>
+          <Text style={styles.category}>{product.category}</Text>
+
+          {/* Stock + Status */}
+          <View style={styles.stockStatus}>
+            <Text style={styles.stock}>
+              Stock: {product.stock ?? "N/A"}
             </Text>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(product.status) }]}>
-              <Ionicons 
-                name={getStatusIcon(product.status)} 
-                size={12} 
-                color="#fff" 
+            <View style={styles.statusBadge}>
+              <Ionicons
+                name={getStatusIcon(product.status)}
+                size={12}
+                color="#fff"
                 style={styles.statusIcon}
               />
               <Text style={styles.statusText}>{product.status}</Text>
             </View>
           </View>
-          
-          <View style={styles.itemDetails}>
-            <View style={styles.detailRow}>
-              <Ionicons name="pricetag" size={16} color="#6c757d" />
-              <Text style={styles.detailText}>${product.price.toFixed(2)}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Ionicons name="cube" size={16} color="#6c757d" />
-              <Text style={styles.detailText}>{product.stock} units</Text>
-            </View>
-          </View>
-
-          {product.category && (
-            <Text style={styles.categoryText}>{product.category}</Text>
-          )}
         </View>
-
-        <TouchableOpacity
-          style={styles.moreButton}
-          onPress={() => onEdit(product)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="ellipsis-vertical" size={20} color="#6c757d" />
-        </TouchableOpacity>
       </View>
     </Swipeable>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  itemContainer: {
+  card: {
+    flexDirection: "row",
     backgroundColor: "#fff",
-    marginBottom: vs(12),
-    borderRadius: ms(12),
-    padding: s(16),
-    flexDirection: "row",
-    alignItems: "center",
-    elevation: 2,
+    borderRadius: 10,
+    marginVertical: 8,
+    padding: 10,
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
-  },
-  itemContent: {
-    flex: 1,
-  },
-  itemHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 2,
     alignItems: "center",
-    marginBottom: vs(8),
   },
-  itemName: {
-    fontSize: ms(16),
-    fontWeight: "700",
-    color: "#212529",
+  image: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+  placeholder: {
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  info: {
     flex: 1,
-    marginRight: s(8),
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  description: {
+    fontSize: 12,
+    color: "#666",
+  },
+  price: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#000",
+  },
+  category: {
+    fontSize: 12,
+    color: "#999",
+  },
+  stockStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 5,
+  },
+  stock: {
+    fontSize: 12,
+    marginRight: 10,
+    color: "#333",
   },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: s(8),
-    paddingVertical: vs(4),
-    borderRadius: ms(12),
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    backgroundColor: "#007bff",
   },
   statusIcon: {
-    marginRight: s(4),
+    marginRight: 4,
   },
   statusText: {
-    fontSize: ms(11),
-    fontWeight: "600",
+    fontSize: 12,
     color: "#fff",
   },
-  itemDetails: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: vs(4),
-  },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  detailText: {
-    fontSize: ms(14),
-    color: "#6c757d",
-    marginLeft: s(4),
-    fontWeight: "500",
-  },
-  categoryText: {
-    fontSize: ms(12),
-    color: "#adb5bd",
-    fontStyle: "italic",
-  },
   moreButton: {
-    padding: s(8),
+    padding: 5,
   },
-  leftActions: {
-    flex: 1,
+  actionContainer: {
     justifyContent: "center",
-    alignItems: "flex-end",
-    paddingRight: s(20),
-  },
-  rightActions: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "flex-start",
-    paddingLeft: s(20),
-  },
-  editButton: {
-    backgroundColor: "#28a745",
-    paddingHorizontal: s(20),
-    paddingVertical: vs(15),
-    borderRadius: ms(8),
     alignItems: "center",
-    minWidth: s(80),
+    width: 80,
+  },
+  actionButton: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
   },
   deleteButton: {
     backgroundColor: "#dc3545",
-    paddingHorizontal: s(20),
-    paddingVertical: vs(15),
-    borderRadius: ms(8),
-    alignItems: "center",
-    minWidth: s(80),
+    borderTopRightRadius: 10,
+    borderBottomRightRadius: 10,
+  },
+  editButton: {
+    backgroundColor: "#28a745",
+    borderTopLeftRadius: 10,
+    borderBottomLeftRadius: 10,
   },
   actionText: {
     color: "#fff",
-    fontSize: ms(12),
-    fontWeight: "600",
-    marginTop: vs(4),
+    fontSize: 12,
+    marginTop: 2,
   },
 });
+
+export default ProductCard;

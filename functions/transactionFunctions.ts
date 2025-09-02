@@ -1,12 +1,14 @@
 import { db } from "config/firebaseConfig";
-import { collection, doc, getDocs, onSnapshot, orderBy, query, Timestamp, updateDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, Timestamp, updateDoc } from "firebase/firestore";
 import { AdminTransaction } from "functions/types";
+import { createSingleUserNotification } from "./notificationFunctions"; // 👈 import notification helper
 
 // Convert Firestore document to AdminTransaction
 export const convertTransaction = (docSnap: any): AdminTransaction => {
   const data = docSnap.data();
   return {
     id: docSnap.id,
+    userId: data.userId,
     receiptNumber: data.receiptNumber,
     date: data.date instanceof Timestamp ? data.date.toDate() : new Date(),
     customerName: data.customerName,
@@ -39,7 +41,8 @@ export const listenTransactions = (callback: (transactions: AdminTransaction[]) 
   return unsubscribe;
 };
 
-// Update payment status
+// Update payment status + log change + notification
+// Update payment status + log change + notification
 export const updateTransactionPayment = async (
   transactionId: string,
   newStatus: AdminTransaction["paymentStatus"],
@@ -47,8 +50,45 @@ export const updateTransactionPayment = async (
   paymentMethod?: AdminTransaction["paymentMethod"]
 ) => {
   const ref = doc(db, "transactions", transactionId);
-  await updateDoc(ref, { paymentStatus: newStatus, amountPaid, paymentMethod: paymentMethod || null });
+
+  // 🔹 calculate change
+  const snapBefore = await getDoc(ref);
+  if (!snapBefore.exists()) {
+    console.error("Transaction not found.");
+    return;
+  }
+  const dataBefore = snapBefore.data();
+  const total = dataBefore?.total || 0;
+  const change = amountPaid > total ? amountPaid - total : 0;
+
+  // 🔹 update transaction with change
+  await updateDoc(ref, {
+    paymentStatus: newStatus,
+    amountPaid,
+    paymentMethod: paymentMethod || null,
+    change, // ✅ persist change in Firestore
+  });
+
+  // 🔹 fetch updated transaction
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    console.error("Transaction not found after update.");
+    return;
+  }
+  const data = snap.data();
+
+  // 🔹 create notification
+  await createSingleUserNotification(
+    data?.userId, // 👈 correct field
+    "Payment Updated",
+    `Your payment of ₱${amountPaid.toFixed(2)} via ${paymentMethod || "N/A"} was recorded. 
+    Status: ${newStatus}. ${change > 0 ? `Change: ₱${change.toFixed(2)}` : ""}`,
+    transactionId
+  );
+
+  console.log("✅ Payment updated, change stored, and notification created.");
 };
+
 /**
  * Calculates total sales from an array of AdminTransaction.
  * @param transactions - array of AdminTransaction

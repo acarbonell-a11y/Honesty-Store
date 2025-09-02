@@ -24,7 +24,8 @@ interface PaymentModalProps {
     transactionId: string,
     status: Transaction['paymentStatus'],
     amountPaid: number,
-    paymentMethod?: Transaction['paymentMethod']
+    paymentMethod?: Transaction['paymentMethod'],
+    change?: number
   ) => void;
 }
 
@@ -51,56 +52,56 @@ export default function PaymentModal({
   if (!transaction) return null;
 
   const remainingBalance = transaction.total - transaction.amountPaid;
+  const change = parseFloat(amountPaid || "0") - transaction.total;
 
+  // Validation logic
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     const amount = parseFloat(amountPaid);
 
     if (!amountPaid || isNaN(amount) || amount < 0) {
       newErrors.amount = "Valid amount is required";
-    } else if (amount > transaction.total) {
-      newErrors.amount = "Amount cannot exceed total";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-// Deduct stock for each item in the transaction
-const deductStock = async () => {
-  if (!transaction?.items || transaction.items.length === 0) return;
+  // Deduct stock for each item in the transaction
+  const deductStock = async () => {
+    if (!transaction?.items || transaction.items.length === 0) return;
 
-  try {
-    for (const item of transaction.items as (TransactionItemTypeDeduct & { stockDeducted?: boolean })[]) {
-      if (item.stockDeducted) continue;
+    try {
+      for (const item of transaction.items as (TransactionItemTypeDeduct & { stockDeducted?: boolean })[]) {
+        if (item.stockDeducted) continue;
 
-      const inventoryId: string =
-        typeof item.id === "string"
-          ? item.id
-          : item.id && typeof item.id.id === "string"
-          ? item.id.id
-          : "";
+        const inventoryId: string =
+          typeof item.id === "string"
+            ? item.id
+            : item.id && typeof item.id.id === "string"
+            ? item.id.id
+            : "";
 
-      if (!inventoryId) {
-        console.warn("Skipping item with missing inventory reference:", item);
-        continue;
+        if (!inventoryId) {
+          console.warn("Skipping item with missing inventory reference:", item);
+          continue;
+        }
+
+        const inventoryItem = await getInventoryItem(inventoryId);
+        if (!inventoryItem) continue;
+
+        const newQuantity = inventoryItem.quantity - item.quantity;
+        if (newQuantity < 0) continue;
+
+        await updateInventoryItem(inventoryId, { quantity: newQuantity });
+        (item as any).stockDeducted = true;
       }
-
-      const inventoryItem = await getInventoryItem(inventoryId);
-      if (!inventoryItem) continue;
-
-      const newQuantity = inventoryItem.quantity - item.quantity;
-      if (newQuantity < 0) continue;
-
-      await updateInventoryItem(inventoryId, { quantity: newQuantity });
-      (item as any).stockDeducted = true;
+    } catch (error) {
+      console.error("Failed to deduct stock:", error);
     }
-  } catch (error) {
-    console.error("Failed to deduct stock:", error);
-  }
-};
+  };
 
- const handleUpdatePayment = () => {
+  const handleUpdatePayment = () => {
   if (!validateForm()) return;
 
   const amount = parseFloat(amountPaid);
@@ -114,6 +115,8 @@ const deductStock = async () => {
     newStatus = "Unpaid";
   }
 
+  const changeAmount = Math.max(amount - transaction.total, 0); // ✅ only positive
+
   Alert.alert(
     "Update Payment",
     `Update payment to ₱${amount.toFixed(2)}?`,
@@ -122,21 +125,23 @@ const deductStock = async () => {
       {
         text: "Update",
         onPress: async () => {
-          // Deduct stock only if status changes from "Unpaid" to Paid/Partially Paid
-          const wasUnpaid = transaction.paymentStatus === "Unpaid" || transaction.paymentStatus === "Pending";
+          const wasUnpaid =
+            transaction.paymentStatus === "Unpaid" || transaction.paymentStatus === "Pending";
           const willBePaidOrPartial = newStatus === "Paid" || newStatus === "Partially Paid";
 
-          if (wasUnpaid) {
+          if (wasUnpaid && willBePaidOrPartial) {
             await deductStock();
           }
 
-          onUpdatePayment(transaction.id, newStatus, amount, selectedPaymentMethod);
+          // ✅ Now pass changeAmount as well
+          onUpdatePayment(transaction.id, newStatus, amount, selectedPaymentMethod, changeAmount);
           onClose();
         },
       },
     ]
   );
 };
+
 
   const handleQuickAmount = (amount: number) => {
     setAmountPaid(amount.toString());
@@ -163,6 +168,7 @@ const deductStock = async () => {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={styles.modalContent}>
+          {/* Header */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Update Payment</Text>
             <TouchableOpacity
@@ -228,6 +234,11 @@ const deductStock = async () => {
                 />
               </View>
               {errors.amount && <Text style={styles.errorText}>{errors.amount}</Text>}
+              {change > 0 && (
+                <Text style={{ fontSize: ms(14), color: "#1a6a37", marginTop: vs(4) }}>
+                  Change: ₱{change.toFixed(2)}
+                </Text>
+              )}
             </View>
 
             {/* Payment Method Selection */}
@@ -296,6 +307,7 @@ const deductStock = async () => {
             </View>
           </ScrollView>
 
+          {/* Footer Buttons */}
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
               <Text style={styles.cancelButtonText}>Cancel</Text>

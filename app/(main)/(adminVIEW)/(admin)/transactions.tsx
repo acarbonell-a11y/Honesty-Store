@@ -3,12 +3,10 @@ import { useFocusEffect } from "@react-navigation/native";
 import { db } from "config/firebaseConfig";
 import {
   collection,
-  doc,
   onSnapshot,
   orderBy,
   query,
   Timestamp,
-  updateDoc,
 } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -23,7 +21,10 @@ import {
 } from "react-native";
 import { ms, s, vs } from "react-native-size-matters";
 
-import { getTotalSalesTrans } from "@/functions/transactionFunctions";
+import {
+  getTotalSalesTrans,
+  updateTransactionPayment,
+} from "@/functions/transactionFunctions";
 import type { AdminTransaction } from "functions/types";
 import Avatar from "../(components)/Avatar";
 import PaymentModal from "../(components)/PaymentModal";
@@ -53,15 +54,21 @@ export default function Transactions() {
           const d = docSnap.data() as any;
           return {
             id: docSnap.id,
-            receiptNumber: d.receiptNumber,
-            date: d.date instanceof Timestamp ? d.date.toDate() : new Date(),
-            customerName: d.customerName,
+            receiptNumber: d.receiptNumber ?? "",
+            date:
+              d.date instanceof Timestamp
+                ? d.date.toDate()
+                : new Date(d.date ?? Date.now()),
+            customerName: d.customerName ?? "",
             items: d.items || [],
             subtotal: Number(d.subtotal) || 0,
             tax: Number(d.tax) || 0,
             total: Number(d.total) || 0,
-            paymentStatus: d.paymentStatus,
-            amountPaid: Number(d.amountPaid) || 0, // ✅ force number
+            paymentStatus: d.paymentStatus as
+              | "Paid"
+              | "Partially Paid"
+              | "Unpaid",
+            amountPaid: Number(d.amountPaid) || 0,
             paymentMethod: d.paymentMethod,
             notes: d.notes,
           };
@@ -76,18 +83,18 @@ export default function Transactions() {
   // 🔧 Update payment
   const updatePaymentStatus = useCallback(
     async (
-      receiptNumber: string,
+      transactionId: string,
       newStatus: AdminTransaction["paymentStatus"],
       amountPaid: number,
       paymentMethod?: AdminTransaction["paymentMethod"]
     ) => {
       try {
-        const transactionRef = doc(db, "transactions", receiptNumber);
-        await updateDoc(transactionRef, {
-          paymentStatus: newStatus,
+        await updateTransactionPayment(
+          transactionId,
+          newStatus,
           amountPaid,
-          paymentMethod: paymentMethod || null,
-        });
+          paymentMethod
+        );
       } catch (error) {
         console.error("Error updating transaction:", error);
         Alert.alert(
@@ -130,11 +137,12 @@ export default function Transactions() {
   const filteredTransactions = useMemo(() => {
     return transactions
       .filter((t) => {
+        const search = searchText.toLowerCase();
         const matchesSearch =
-          t.receiptNumber?.toLowerCase().includes(searchText.toLowerCase()) ||
-          t.customerName?.toLowerCase().includes(searchText.toLowerCase()) ||
+          t.receiptNumber?.toLowerCase().includes(search) ||
+          t.customerName?.toLowerCase().includes(search) ||
           t.items.some((item) =>
-            item.name.toLowerCase().includes(searchText.toLowerCase())
+            item.name?.toLowerCase().includes(search)
           );
         const matchesFilter =
           filterStatus === "All" || t.paymentStatus === filterStatus;
@@ -150,7 +158,9 @@ export default function Transactions() {
     const partiallyPaid = transactions.filter(
       (t) => t.paymentStatus === "Partially Paid"
     ).length;
-    const unpaid = transactions.filter((t) => t.paymentStatus === "Unpaid").length;
+    const unpaid = transactions.filter(
+      (t) => t.paymentStatus === "Unpaid"
+    ).length;
 
     const totalRevenue = Number(getTotalSalesTrans(transactions) || 0);
     const pendingAmount = transactions
@@ -274,7 +284,7 @@ export default function Transactions() {
         <FlatList
           ref={flatListRef}
           data={filteredTransactions}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={ListHeaderComponent}
@@ -376,6 +386,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginBottom: vs(16),
+    backgroundColor: "#fff",
   },
   filterContainer: { marginBottom: vs(16), marginTop: vs(20) },
   filterLabel: {

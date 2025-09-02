@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { AdminTransaction as Transaction } from 'functions/types'; // adjust path
+import { AdminTransaction as Transaction } from "functions/types"; // adjust path
 import React from "react";
 import {
   Dimensions,
@@ -19,7 +19,7 @@ interface ReceiptModalProps {
   onDownload: (transaction: Transaction) => void;
 }
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 export default function ReceiptModal({
   visible,
@@ -30,20 +30,47 @@ export default function ReceiptModal({
   if (!transaction) return null;
 
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   };
 
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
+
+  // Safely turn item.id (which may be a Firestore DocumentReference) into a unique string key
+  const getItemKey = (item: any, index: number): string => {
+    const raw = item?.id;
+
+    if (raw == null) return `${item?.name ?? "item"}-${index}`;
+    if (typeof raw === "string" || typeof raw === "number") return String(raw);
+
+    // Firestore DocumentReference usually has .id and .path
+    const refId = (raw as any)?.id;
+    if (typeof refId === "string" && refId.length) return refId;
+
+    const refPath = (raw as any)?.path;
+    if (typeof refPath === "string" && refPath.length) return refPath;
+
+    // Fallback: try toString() but avoid "[object Object]"
+    const maybe = String(raw);
+    if (maybe && maybe !== "[object Object]") return maybe;
+
+    return `${item?.name ?? "item"}-${index}`;
+  };
+
+  // calculate change
+  const change =
+    transaction.amountPaid > transaction.total
+      ? transaction.amountPaid - transaction.total
+      : 0;
 
   return (
     <Modal
@@ -66,69 +93,122 @@ export default function ReceiptModal({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.receiptContainer} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.receiptContainer}
+            showsVerticalScrollIndicator={false}
+          >
             {/* Receipt Header */}
             <View style={styles.receiptHeader}>
               <Text style={styles.businessName}>Shopnesty</Text>
-              <Text style={styles.receiptNumber}>{transaction.receiptNumber}</Text>
+              <Text style={styles.receiptNumber}>
+                {transaction.receiptNumber}
+              </Text>
               <Text style={styles.receiptDate}>
                 {formatDate(transaction.date)} at {formatTime(transaction.date)}
               </Text>
               {transaction.customerName && (
-                <Text style={styles.customerInfo}>Customer: {transaction.customerName}</Text>
+                <Text style={styles.customerInfo}>
+                  Customer: {transaction.customerName}
+                </Text>
               )}
             </View>
 
             {/* Items List */}
             <View style={styles.itemsSection}>
               <Text style={styles.sectionTitle}>Items Purchased</Text>
-              {transaction.items.map((item: { id: React.Key | null | undefined; name: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; quantity: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; price: number; total: number; }, index: any) => (
-                <View key={item.id} style={styles.itemRow}>
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{item.name}</Text>
-                    <Text style={styles.itemDetails}>
-                      {item.quantity} × ₱{item.price.toFixed(2)}
+              {transaction.items && transaction.items.length > 0 ? (
+                transaction.items.map((item: any, index: number) => (
+                  <View key={getItemKey(item, index)} style={styles.itemRow}>
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemName}>{item.name}</Text>
+                      <Text style={styles.itemDetails}>
+                        {item.quantity} × ₱{Number(item.price).toFixed(2)}
+                      </Text>
+                    </View>
+                    <Text style={styles.itemTotal}>
+                      ₱{Number(item.total).toFixed(2)}
                     </Text>
                   </View>
-                  <Text style={styles.itemTotal}>₱{item.total.toFixed(2)}</Text>
-                </View>
-              ))}
+                ))
+              ) : (
+                <Text style={styles.noItems}>No items purchased.</Text>
+              )}
             </View>
 
             {/* Totals */}
             <View style={styles.totalsSection}>
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Subtotal:</Text>
-                <Text style={styles.totalValue}>₱{transaction.subtotal.toFixed(2)}</Text>
+                <Text style={styles.totalValue}>
+                  ₱{transaction.subtotal.toFixed(2)}
+                </Text>
               </View>
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Tax (12%):</Text>
-                <Text style={styles.totalValue}>₱{transaction.tax.toFixed(2)}</Text>
+                <Text style={styles.totalValue}>
+                  ₱{transaction.tax.toFixed(2)}
+                </Text>
               </View>
               <View style={[styles.totalRow, styles.grandTotalRow]}>
                 <Text style={styles.grandTotalLabel}>Total:</Text>
-                <Text style={styles.grandTotalValue}>₱{transaction.total.toFixed(2)}</Text>
+                <Text style={styles.grandTotalValue}>
+                  ₱{transaction.total.toFixed(2)}
+                </Text>
               </View>
             </View>
 
             {/* Payment Information */}
             <View style={styles.paymentSection}>
               <Text style={styles.sectionTitle}>Payment Information</Text>
+
+              {/* Total Amount */}
+              <View style={styles.paymentRow}>
+                <Text style={styles.paymentLabel}>Total Amount:</Text>
+                <Text style={styles.paymentValue}>
+                  ₱{transaction.total.toFixed(2)}
+                </Text>
+              </View>
+
+              {/* Payment Status */}
               <View style={styles.paymentRow}>
                 <Text style={styles.paymentLabel}>Status:</Text>
-                <Text style={[
-                  styles.paymentValue,
-                  { color: transaction.paymentStatus === "Paid" ? "#28a745" : 
-                           transaction.paymentStatus === "Partially Paid" ? "#ffc107" : "#dc3545" }
-                ]}>
+                <Text
+                  style={[
+                    styles.paymentValue,
+                    {
+                      color:
+                        transaction.paymentStatus === "Paid"
+                          ? "#28a745"
+                          : transaction.paymentStatus === "Partially Paid"
+                          ? "#ffc107"
+                          : "#dc3545",
+                    },
+                  ]}
+                >
                   {transaction.paymentStatus}
                 </Text>
               </View>
+
+              {/* Amount Paid */}
               <View style={styles.paymentRow}>
                 <Text style={styles.paymentLabel}>Amount Paid:</Text>
-                <Text style={styles.paymentValue}>₱{transaction.amountPaid.toFixed(2)}</Text>
+                <Text style={styles.paymentValue}>
+                  ₱{transaction.amountPaid.toFixed(2)}
+                </Text>
               </View>
-              {transaction.paymentStatus !== "Paid" && (
+
+              {/* Change (only if > 0) */}
+              {change > 0 && (
+                <View style={styles.paymentRow}>
+                  <Text style={styles.paymentLabel}>Change:</Text>
+                  <Text style={[styles.paymentValue, { color: "#28a745" }]}>
+                    ₱{change.toFixed(2)}
+                  </Text>
+                </View>
+              )}
+
+              {/* Remaining Balance (only if no change and not fully paid) */}
+              {change <= 0 && transaction.paymentStatus !== "Paid" && (
                 <View style={styles.paymentRow}>
                   <Text style={styles.paymentLabel}>Remaining Balance:</Text>
                   <Text style={[styles.paymentValue, { color: "#dc3545" }]}>
@@ -136,10 +216,14 @@ export default function ReceiptModal({
                   </Text>
                 </View>
               )}
+
+              {/* Payment Method */}
               {transaction.paymentMethod && (
                 <View style={styles.paymentRow}>
                   <Text style={styles.paymentLabel}>Payment Method:</Text>
-                  <Text style={styles.paymentValue}>{transaction.paymentMethod}</Text>
+                  <Text style={styles.paymentValue}>
+                    {transaction.paymentMethod}
+                  </Text>
                 </View>
               )}
             </View>
@@ -358,5 +442,11 @@ const styles = StyleSheet.create({
     fontSize: ms(16),
     fontWeight: "600",
     marginLeft: s(8),
+  },
+  noItems: {
+    fontSize: 14,
+    fontStyle: "italic",
+    color: "#666",
+    marginTop: 8,
   },
 });

@@ -1,21 +1,25 @@
 // app/functions/authFunctions.ts
+import axios from "axios";
 import {
   addDoc,
   collection,
   doc,
+  FieldValue,
   getDoc,
   getDocs,
   limit,
   orderBy,
   query,
   serverTimestamp,
+  Timestamp,
   updateDoc,
   where,
 } from "firebase/firestore";
+import { Alert } from "react-native";
 import { db } from "../config/firebaseConfig";
 import { loginUser, signUpUser, } from "../services/authServices";
 import { createUserProfile, getUserProfile } from "../services/userServices";
-
+import { createProductNotification } from "./notificationFunctions";
 
 //this handles the setup for new users in the Firebase Database
 export const handleSignUp = async (email: string, password: string, name: string) => {
@@ -42,12 +46,18 @@ export type InventoryItem = {
   price: number;
   quantity: number;
   sku: string;
-  lowStockThreshold: number;
+  lowStockThreshold: number ;
   supplier: {
     name: string;
     contact: string;
   };
+  category?: string;
+  status?: string;
+  imageUrl?: string;
+  lastUpdated?: Timestamp | FieldValue;
+  createdAt?: Timestamp | FieldValue;
 };
+
 
 export type Transaction = {
   transactionType: "sale" | "purchase";
@@ -66,39 +76,102 @@ export type Transaction = {
   paymentStatus: "Paid" | "Pending";
 };
 
-
 /**
- * INVENTORY FUNCTIONS
+ * Upload image to Cloudinary and return secure URL
  */
-const inventoryCollection = collection(db, "inventory");
-
-export const addInventoryItem = async (item: InventoryItem): Promise<string | null> => {
+export const uploadImageToCloudinary = async (uri: string): Promise<string | null> => {
   try {
-    const docRef = await addDoc(inventoryCollection, {
-      ...item,
-      lastUpdated: serverTimestamp(),
-    });
-    console.log("Item added with ID: ", docRef.id);
-    return docRef.id;
-  } catch (error) {
-    console.error("Error adding document: ", error);
+    const formData = new FormData();
+    formData.append("file", { uri, type: "image/jpeg", name: "product.jpg" } as any);
+    formData.append("upload_preset", "shopnesty");
+
+    const response = await axios.post(
+      "https://api.cloudinary.com/v1_1/dagwspffq/image/upload",
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+
+    return response.data.secure_url; // ✅ Cloudinary URL
+  } catch (err) {
+    console.error("Cloudinary upload error:", err);
+    Alert.alert("Upload Failed", "Could not upload image. Please try again.");
     return null;
   }
 };
 
+const inventoryCollection = collection(db, "inventory");
+
+/**
+ * Add a new inventory item
+ */
+export const addInventoryItem = async (item: InventoryItem, imageUri?: string): Promise<string | null> => {
+  try {
+    let imageUrl: string | null = null;
+
+    if (imageUri) {
+      const uploadedUrl = await uploadImageToCloudinary(imageUri);
+      if (!uploadedUrl) return null; // Stop if upload fails
+      imageUrl = uploadedUrl;
+    }
+
+    const docRef = await addDoc(inventoryCollection, {
+      ...item,
+      imageUrl,
+      lastUpdated: serverTimestamp(),
+    });
+
+    await createProductNotification(
+      docRef.id,
+      "New Product Added",
+      `A new product "${item.name}" has been added to the inventory.`
+    );
+
+    console.log("Item added with ID:", docRef.id);
+    return docRef.id;
+  } catch (error) {
+    console.error("Error adding inventory item:", error);
+    return null;
+  }
+};
+
+/**
+ * Update an existing inventory item
+ */
 export const updateInventoryItem = async (
   itemId: string,
-  updatedData: Partial<InventoryItem>
+  updatedData: Partial<InventoryItem>,
+  imageUri?: string
 ): Promise<void> => {
   try {
     const itemRef = doc(db, "inventory", itemId);
+
+    // Get previous state
+    const prevSnap = await getDoc(itemRef);
+    const prevData = prevSnap.exists() ? (prevSnap.data() as InventoryItem) : null;
+
+    // Upload new image if provided
+    let imageUrl = updatedData.imageUrl ?? prevData?.imageUrl ?? null;
+    if (imageUri) {
+      const uploadedUrl = await uploadImageToCloudinary(imageUri);
+      if (uploadedUrl) imageUrl = uploadedUrl;
+    }
+
     await updateDoc(itemRef, {
       ...updatedData,
+      imageUrl,
       lastUpdated: serverTimestamp(),
     });
+
     console.log("Item updated successfully");
+
+    // Notify if quantity increased (restocked)
+    if (prevData && updatedData.quantity && updatedData.quantity > prevData.quantity) {
+      const title = "Product Restocked";
+      const message = `${updatedData.name || prevData.name} has been restocked. New quantity: ${updatedData.quantity}`;
+      await createProductNotification(itemId, title, message);
+    }
   } catch (error) {
-    console.error("Error updating document: ", error);
+    console.error("Error updating inventory item:", error);
   }
 };
 

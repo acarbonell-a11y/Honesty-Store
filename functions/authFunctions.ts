@@ -1,10 +1,10 @@
 import { getUserProfile } from "@/services/userServices";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth"; //imports the handler for signing in.
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { Alert } from "react-native";
 import { auth } from "../config/firebaseConfig";
-import { handleSignUp } from "./firebaseFunctions"; // the firebase wrapper 
+import { handleSignUp } from "./firebaseFunctions";
 
-//Sign-up Function
+// Sign-up Function
 export const onSignUp = async (
   email: string,
   password: string,
@@ -13,20 +13,20 @@ export const onSignUp = async (
 ) => {
   if (password !== confirm) {
     Alert.alert("Error", "Passwords do not match!");
-    return;
+    return false;
   }
 
   try {
     await handleSignUp(email, password, username);
     Alert.alert("Success", "Account created!");
-    return true; // signal success so the screen decides what to do
+    return true; // signal success
   } catch (error: any) {
     Alert.alert("Error", error.message);
     return false;
   }
 };
 
-//Login Function
+// Login Function
 export const onLogin = async (
   email: string,
   password: string
@@ -38,7 +38,7 @@ export const onLogin = async (
     // Fetch profile from Firestore
     const profile = await getUserProfile(uid);
 
-    if (!profile) return null; // No profile found
+    if (!profile) return null;
 
     return {
       uid,
@@ -52,6 +52,11 @@ export const onLogin = async (
 };
 
 // Sign out
-export const logoutUser = () => {
-  return signOut(auth);
+export const logoutUser = async () => {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error("Logout failed:", error);
+    throw error;
+  }
 };

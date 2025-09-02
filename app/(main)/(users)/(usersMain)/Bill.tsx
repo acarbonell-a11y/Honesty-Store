@@ -123,8 +123,8 @@ const Bill = () => {
       <View style={styles.header}>
         <Text style={styles.title}>My Bills</Text>
         <View style={styles.iconContainer}>
-          {renderIcon('notifications-outline', 5, scaleNotification, () =>
-            router.push('/(main)/(users)/(usersMain)/NotifacationScreen')
+          {renderIcon('notifications-outline', 0, scaleNotification, () =>
+            router.push('/(main)/(users)/(userHidComps)/NotifacationScreen')
           )}
         </View>
       </View>

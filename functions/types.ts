@@ -1,3 +1,5 @@
+import { Timestamp } from "firebase/firestore";
+
 export interface TransactionItemType {
   id: string ;
   name: string;
@@ -24,6 +26,7 @@ export interface AdminTransaction {
   receiptNumber: string;
   date: Date;
   customerName?: string;
+  userId?: string;
   items: TransactionItemType[];
   subtotal: number;
   tax: number;
@@ -34,3 +37,16 @@ export interface AdminTransaction {
   notes?: string;
 }
 
+// types/Product.ts
+export interface Product {
+  id: string;
+  name: string;           // used in ProductModal form
+  price: number;          // number (not string!)
+  stock: number;
+  category?: string;
+  imageUrl?: string;
+  image?: string;         // stored image URL
+  status: "In stock" | "Low stock" | "Out of stock";         // in stock, low stock, out of stock
+  lastUpdated?: Timestamp;      // Firestore Timestamp | FieldValue if needed
+  createdAt?: Timestamp;
+}

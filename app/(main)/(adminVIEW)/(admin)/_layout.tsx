@@ -1,3 +1,4 @@
+// app/(admin)/_layout.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
@@ -16,14 +17,14 @@ export default function AdminLayout() {
           borderRadius: 20,
           height: 70,
           paddingBottom: 10,
-          elevation: 5, // Android shadow
-          shadowColor: "#000", // iOS shadow
+          elevation: 5,
+          shadowColor: "#000",
           shadowOpacity: 0.1,
           shadowOffset: { width: 0, height: 2 },
           shadowRadius: 8,
         },
-        tabBarActiveTintColor: "#059038ff", // dark green
-        tabBarInactiveTintColor: "#7d7d7dff",  
+        tabBarActiveTintColor: "#059038ff",
+        tabBarInactiveTintColor: "#7d7d7dff",
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: "600",
