@@ -1,16 +1,18 @@
-import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import BillCard, { BillStatus } from 'app/(main)/(users)/(userComponent)/BillCard';
 import SearchBar from 'app/(main)/(users)/(userComponent)/SearchBar';
 import { useRouter } from 'expo-router';
 import { getAuth } from 'firebase/auth';
 import { getTransactionsForUser } from 'functions/firebaseFunctions';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  Clipboard,
+  FlatList,
   Modal,
   Pressable,
-  ScrollView,
+  RefreshControl,
   StatusBar,
   StyleSheet,
   Text,
@@ -20,57 +22,83 @@ import {
 const Bill = () => {
   const [searchText, setSearchText] = useState('');
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [paymentConfirmModalVisible, setPaymentConfirmModalVisible] = useState(false);
   const [selectedBill, setSelectedBill] = useState<{ billNumber: string; amount: string } | null>(null);
   const [bills, setBills] = useState<
     { id: string; billNumber: string; amount: string; date: string; status: BillStatus }[]
   >([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Gcash' | null>(null);
 
   const router = useRouter();
-  const scaleNotification = useRef(new Animated.Value(1)).current;
   const scalePay = useRef(new Animated.Value(1)).current;
+  const scaleConfirm = useRef(new Animated.Value(0)).current;
+  const flatListRef = useRef<FlatList<any>>(null);
+  const GCashNumber = '09959483927';
 
-  // Fetch user transactions
+  const fetchBills = async () => {
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const transactions = await getTransactionsForUser(user.uid);
+      const mappedBills = transactions.map((tx) => ({
+        id: tx.id,
+        billNumber: tx.receiptNumber ?? tx.id,
+        amount: tx.amountPaid?.toString() ?? '0',
+        date: tx.date?.toDate() ?? new Date(),
+        status: (tx.paymentStatus as BillStatus) ?? 'Pending',
+      }));
+
+      mappedBills.sort((a, b) => {
+        if (a.status === b.status) return b.date.getTime() - a.date.getTime();
+        return a.status === 'Pending' ? -1 : 1;
+      });
+
+      setBills(
+        mappedBills.map((bill) => ({
+          ...bill,
+          date: bill.date.toISOString().split('T')[0],
+        }))
+      );
+    } catch (error) {
+      console.log('Error fetching bills:', error);
+    }
+  };
+
   useEffect(() => {
-    const fetchUserBills = async () => {
-      try {
-        const auth = getAuth();
-        const user = auth.currentUser;
-        if (!user) return;
-
-        const transactions = await getTransactionsForUser(user.uid);
-
-        const mappedBills = transactions.map((tx) => ({
-          id: tx.id,
-          billNumber: tx.receiptNumber ?? tx.id,
-          amount: tx.amountPaid?.toString() ?? '0',
-          date: tx.date?.toDate().toISOString().split('T')[0] ?? '',
-          status: (tx.paymentStatus as BillStatus) ?? 'Pending',
-        }));
-
-        setBills(mappedBills);
-      } catch (error) {
-        console.log('Error fetching bills:', error);
-      }
-    };
-
-    fetchUserBills();
+    fetchBills();
   }, []);
 
-  // Calculate summary
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchBills();
+    setRefreshing(false);
+  };
+
+  // ✅ Reset scroll every time tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    }, [])
+  );
+
   const summary = useMemo(() => {
     let totalDue = 0;
-    let totalCurrent = 0;
+    let pendingCount = 0;
 
-    bills.forEach(bill => {
+    bills.forEach((bill) => {
       const amount = parseFloat(bill.amount);
-      if (bill.status === 'Paid') totalCurrent += amount;
-      else totalDue += amount;
+      if (bill.status !== 'Paid') {
+        totalDue += amount;
+        pendingCount += 1;
+      }
     });
 
-    return { totalDue, totalCurrent };
+    return { totalDue, totalBills: pendingCount };
   }, [bills]);
 
-  // Button animation
   const handlePressIn = (scale: Animated.Value) => {
     Animated.spring(scale, { toValue: 0.9, useNativeDriver: true }).start();
   };
@@ -78,135 +106,134 @@ const Bill = () => {
     Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
   };
 
-  // Open payment modal
   const openPaymentModal = (bill: { billNumber: string; amount: string }) => {
     setSelectedBill(bill);
     setPaymentModalVisible(true);
   };
 
-  // Handle payment selection
   const handlePayment = (method: 'Cash' | 'Gcash') => {
+    if (!selectedBill) return;
+    setPaymentMethod(method);
     setPaymentModalVisible(false);
-    Alert.alert('Payment', `Paid ${selectedBill?.billNumber} via ${method}`);
+    setPaymentConfirmModalVisible(true);
+    Animated.spring(scaleConfirm, { toValue: 1, friction: 6, useNativeDriver: true }).start();
   };
 
-  // Render top icons
-  const renderIcon = (
-    iconName: React.ComponentProps<typeof Ionicons>['name'],
-    badgeCount: number,
-    scale: Animated.Value,
-    onPress?: () => void
-  ) => (
-    <Pressable
-      onPress={onPress}
-      onPressIn={() => handlePressIn(scale)}
-      onPressOut={() => handlePressOut(scale)}
-      hitSlop={10}
-      style={styles.iconWrapper}
-    >
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <Ionicons name={iconName} size={28} color="#000" />
-        {badgeCount > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{badgeCount}</Text>
-          </View>
-        )}
-      </Animated.View>
-    </Pressable>
-  );
+  const handleCopyNumber = () => {
+    Clipboard.setString(GCashNumber);
+    Alert.alert('Copied!', 'GCash number copied to clipboard.');
+  };
+
+  const closeConfirmModal = () => {
+    Animated.timing(scaleConfirm, { toValue: 0, duration: 150, useNativeDriver: true }).start(() =>
+      setPaymentConfirmModalVisible(false)
+    );
+  };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="light-content" backgroundColor="#1a6a37" />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>My Bills</Text>
-        <View style={styles.iconContainer}>
-          {renderIcon('notifications-outline', 0, scaleNotification, () =>
-            router.push('/(main)/(users)/(userHidComps)/NotifacationScreen')
-          )}
+      {/* Green background extended until SearchBar */}
+      <View style={styles.headerBackground}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>My Bills</Text>
+        </View>
+
+        {/* Summary Card */}
+        <View style={styles.summaryCard}>
+          <View style={styles.summarySection}>
+            <Text style={styles.summaryLabel}>Balance Due</Text>
+            <Text style={styles.summaryValue}>₱{summary.totalDue.toFixed(2)}</Text>
+            {summary.totalDue > 0 && (
+              <Pressable
+                style={styles.payButton}
+                onPress={() => openPaymentModal({ billNumber: 'Total Due', amount: summary.totalDue.toString() })}
+                onPressIn={() => handlePressIn(scalePay)}
+                onPressOut={() => handlePressOut(scalePay)}
+              >
+                <Animated.Text style={{ color: '#fff', fontWeight: '700', transform: [{ scale: scalePay }] }}>
+                  Pay Now
+                </Animated.Text>
+              </Pressable>
+            )}
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.summarySection}>
+            <Text style={styles.summaryLabel}>Total Bills</Text>
+            <Text style={[styles.summaryValue, { color: '#1a6a37' }]}>{summary.totalBills}</Text>
+          </View>
+        </View>
+
+        {/* Search Bar inside green area */}
+        <View style={{ marginTop: 20 }}>
+          <SearchBar value={searchText} onChangeText={setSearchText} />
         </View>
       </View>
-
-      {/* Summary Section */}
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryLabel}>Balance Due</Text>
-          <Text style={styles.summaryValue}>₱{summary.totalDue.toFixed(2)}</Text>
-
-          {/* Pay Now Button */}
-          {summary.totalDue > 0 && (
-            <Pressable
-              style={styles.payButton}
-              onPress={() => openPaymentModal({ billNumber: 'Total Due', amount: summary.totalDue.toString() })}
-              onPressIn={() => handlePressIn(scalePay)}
-              onPressOut={() => handlePressOut(scalePay)}
-            >
-              <Animated.Text style={[styles.payButtonText, { transform: [{ scale: scalePay }] }]}>
-                Pay Now
-              </Animated.Text>
-            </Pressable>
-          )}
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryLabel}>Current Paid</Text>
-          <Text style={[styles.summaryValue, { color: '#1a6a37' }]}>
-            ₱{summary.totalCurrent.toFixed(2)}
-          </Text>
-        </View>
-      </View>
-
-      {/* Search */}
-      <SearchBar value={searchText} onChangeText={setSearchText} />
 
       {/* Bills List */}
-      <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 15 }}>
-        {bills
-          .filter(bill => bill.billNumber.toLowerCase().includes(searchText.toLowerCase()))
-          .map(bill => (
-            <BillCard
-              key={bill.id}
-              billNumber={bill.billNumber}
-              amount={bill.amount}
-              date={bill.date}
-              status={bill.status}
-              onPress={() => console.log(`Tapped ${bill.billNumber}`)}
-            />
-          ))}
-      </ScrollView>
+      <FlatList
+        ref={flatListRef}
+        data={bills.filter((bill) => bill.billNumber.toLowerCase().includes(searchText.toLowerCase()))}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <BillCard
+            key={item.id}
+            billNumber={item.billNumber}
+            amount={item.amount}
+            date={item.date}
+            status={item.status}
+            onPress={() => console.log(`Tapped ${item.billNumber}`)}
+          />
+        )}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#1a6a37']} />}
+        style={{ marginTop: 15 }}
+      />
 
       {/* Payment Modal */}
       <Modal transparent visible={paymentModalVisible} animationType="fade">
-        <View style={styles.modalBackground}>
-          <View style={styles.modalContainer}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Payment Method</Text>
-            <Text style={styles.modalBillText}>
+            <Text style={{ fontSize: 16, marginBottom: 20 }}>
               {selectedBill?.billNumber}: ₱{selectedBill?.amount}
             </Text>
-
-            {/* Cash Option */}
-            <Pressable style={styles.paymentOption} onPress={() => handlePayment('Cash')}>
-              <View style={styles.paymentRow}>
-                <Ionicons name="cash-outline" size={24} color="#1a6a37" style={{ marginRight: 12 }} />
-                <Text style={styles.paymentText}>Cash</Text>
-              </View>
+            <Pressable style={styles.modalButton} onPress={() => handlePayment('Cash')}>
+              <Text style={styles.modalButtonText}>Cash</Text>
             </Pressable>
-
-            {/* GCash Option */}
-            <Pressable style={styles.paymentOption} onPress={() => handlePayment('Gcash')}>
-              <View style={styles.paymentRow}>
-                <Ionicons name="card-outline" size={24} color="#1a6a37" style={{ marginRight: 12 }} />
-                <Text style={styles.paymentText}>Gcash</Text>
-              </View>
+            <Pressable style={styles.modalButton} onPress={() => handlePayment('Gcash')}>
+              <Text style={styles.modalButtonText}>Gcash</Text>
             </Pressable>
-
-            {/* Cancel Button */}
-            <Pressable onPress={() => setPaymentModalVisible(false)} style={styles.closeButton}>
-              <Text style={styles.closeText}>Cancel</Text>
+            <Pressable onPress={() => setPaymentModalVisible(false)} style={{ marginTop: 10 }}>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: '#a9a9a9' }}>Cancel</Text>
             </Pressable>
           </View>
+        </View>
+      </Modal>
+
+      {/* Payment Confirmation Modal */}
+      <Modal transparent visible={paymentConfirmModalVisible} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <Animated.View style={[styles.modalContent, { transform: [{ scale: scaleConfirm }] }]}>
+            <Text style={styles.modalTitle}>Payment Info</Text>
+            <Text style={{ textAlign: 'center', marginVertical: 15 }}>
+              {paymentMethod === 'Cash'
+                ? `Please proceed to the store to pay cash for ${selectedBill?.billNumber}`
+                : `Pay via GCash\nName: A*** *******LL`}
+            </Text>
+
+            {paymentMethod === 'Gcash' && (
+              <Pressable onPress={handleCopyNumber} style={styles.copyButton}>
+                <Text style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>Copy Number</Text>
+              </Pressable>
+            )}
+
+            <Pressable onPress={closeConfirmModal} style={{ marginTop: 10 }}>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: '#a9a9a9' }}>OK</Text>
+            </Pressable>
+          </Animated.View>
         </View>
       </Modal>
     </View>
@@ -214,43 +241,29 @@ const Bill = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 17, paddingTop: 45 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  title: { fontWeight: '800', color: '#000', fontSize: 28 },
-  iconContainer: { flexDirection: 'row', alignItems: 'center' },
-  iconWrapper: { marginHorizontal: 10 },
-  badge: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
+  container: { flex: 1, backgroundColor: '#fff' },
+  headerBackground: {
     backgroundColor: '#1a6a37',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingTop: 45,
+    paddingBottom: 25,
+    paddingHorizontal: 17,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold', textAlign: 'center' },
-
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerTitle: { color: '#fff', fontSize: 28, fontWeight: '800' },
   summaryCard: {
     flexDirection: 'row',
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 15,
-    alignItems: 'center',
+    marginTop: 20,
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 6,
-    elevation: 2,
+    alignItems: 'center',
   },
-  summaryItem: { flex: 1, alignItems: 'center' },
+  summarySection: { flex: 1, alignItems: 'center' },
   summaryLabel: { fontSize: 13, color: '#555', marginBottom: 6 },
-  summaryValue: { fontSize: 18, fontWeight: '700', color: '#000' },
-  divider: { width: 1, height: '100%', backgroundColor: '#e0e0e0' },
-
+  summaryValue: { fontSize: 18, fontWeight: '700', color: '#333' },
   payButton: {
     marginTop: 12,
     backgroundColor: '#1a6a37',
@@ -258,38 +271,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 25,
     borderRadius: 10,
   },
-  payButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-
-  modalBackground: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  modalContainer: {
+  divider: { width: 1, height: '100%', backgroundColor: '#ddd' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: {
+    width: '85%',
     backgroundColor: '#fff',
     borderRadius: 16,
     paddingVertical: 20,
     paddingHorizontal: 20,
+    alignItems: 'center',
   },
-  modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 10, textAlign: 'center', color: '#1a6a37' },
-  modalBillText: { fontSize: 16, marginBottom: 20, textAlign: 'center' },
-  paymentOption: {
+  modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 10, color: '#1a6a37' },
+  modalButton: {
     paddingVertical: 12,
     paddingHorizontal: 15,
     backgroundColor: '#f1f1f1',
     borderRadius: 12,
     marginBottom: 12,
+    width: '100%',
   },
-  paymentRow: { flexDirection: 'row', alignItems: 'center' },
-  paymentText: { fontSize: 16, fontWeight: '600', color: '#212529' },
-  closeButton: { marginTop: 10, alignItems: 'center' },
-  closeText: { fontSize: 16, fontWeight: '600', color: '#a9a9a9' },
+  modalButtonText: { fontSize: 16, fontWeight: '600', color: '#212529', textAlign: 'center' },
+  copyButton: { backgroundColor: '#1a6a37', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10, marginBottom: 10 },
 });
 
 export default Bill;

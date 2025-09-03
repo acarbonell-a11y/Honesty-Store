@@ -1,11 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import CartItemCard from "app/(main)/(users)/(userComponent)/CartItemCard";
+import { auth, db } from "config/firebaseConfig";
 import { Stack, useRouter } from "expo-router";
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -13,24 +18,8 @@ import {
   View,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
-import { auth, db } from "config/firebaseConfig";
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  updateDoc,
-} from "firebase/firestore";
-
-// Types
 type InventoryItem = {
   name: string;
   price: number | string;
@@ -47,23 +36,24 @@ type CartItem = {
   checked: boolean;
 };
 
-const coercePrice = (p: number | string): number =>
-  typeof p === "number" ? p : parseFloat(p);
+const coercePrice = (p: number | string): number => (typeof p === "number" ? p : parseFloat(p));
 
 export default function CartScreen() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
+  const [warningModalVisible, setWarningModalVisible] = useState(false);
   const [nextBillingDate, setNextBillingDate] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectAll, setSelectAll] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // cart ref for logged in user
   const cartCollectionRefForUser = () => {
     const user = auth.currentUser;
     if (!user) return null;
     return collection(db, "users", user.uid, "cart");
   };
 
-  // Live updates from Firestore
   useEffect(() => {
     const ref = cartCollectionRefForUser();
     if (!ref) return;
@@ -77,9 +67,7 @@ export default function CartScreen() {
       const resolved: CartItem[] = [];
 
       for (const cartDoc of snap.docs) {
-        const data = cartDoc.data() as {
-          products: { productId: string; quantity: number }[];
-        };
+        const data = cartDoc.data() as { products: { productId: string; quantity: number }[] };
         if (!data.products) continue;
 
         for (const { productId, quantity } of data.products) {
@@ -106,7 +94,6 @@ export default function CartScreen() {
     return () => unsubscribe();
   }, []);
 
-  // fetch cart (manual refresh)
   const fetchCart = async () => {
     try {
       const ref = cartCollectionRefForUser();
@@ -120,9 +107,7 @@ export default function CartScreen() {
 
       const resolved: CartItem[] = [];
       for (const cartDoc of snap.docs) {
-        const data = cartDoc.data() as {
-          products: { productId: string; quantity: number }[];
-        };
+        const data = cartDoc.data() as { products: { productId: string; quantity: number }[] };
         if (!data.products) continue;
 
         for (const { productId, quantity } of data.products) {
@@ -148,72 +133,24 @@ export default function CartScreen() {
     }
   };
 
-  // update Firestore on qty change
-  const syncCart = async (productId: string, newQty: number) => {
-    const ref = cartCollectionRefForUser();
-    if (!ref) return;
-    try {
-      const snap = await getDocs(ref);
-      if (snap.empty) return;
-
-      const cartDoc = snap.docs[0];
-      const cartDocRef = cartDoc.ref;
-      const cartData = cartDoc.data() as {
-        products: { productId: string; quantity: number }[];
-      };
-
-      const updatedProducts = cartData.products.map((p) =>
-        p.productId === productId ? { ...p, quantity: newQty } : p
-      );
-
-      await updateDoc(cartDocRef, { products: updatedProducts });
-
-      setCartItems((prev) =>
-        prev.map((item) =>
-          item.id === productId ? { ...item, qty: newQty } : item
-        )
-      );
-    } catch (err) {
-      console.error("❌ Error syncing cart:", err);
-    }
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchCart();
+    setRefreshing(false);
   };
 
-  // delete item
-  const handleDelete = async (productId: string) => {
-    const ref = cartCollectionRefForUser();
-    if (!ref) return;
-    try {
-      const snap = await getDocs(ref);
-      if (snap.empty) return;
-
-      const cartDoc = snap.docs[0];
-      const cartDocRef = cartDoc.ref;
-      const cartData = cartDoc.data() as {
-        products: { productId: string; quantity: number }[];
-      };
-
-      const updatedProducts = cartData.products.filter(
-        (p) => p.productId !== productId
-      );
-
-      await updateDoc(cartDocRef, { products: updatedProducts });
-
-      setCartItems((prev) => prev.filter((item) => item.id !== productId));
-    } catch (err) {
-      console.error("❌ Error deleting item:", err);
-    }
-  };
-
-  // toggle checkbox
   const handleToggle = (id: string) => {
     setCartItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, checked: !item.checked } : item
-      )
+      prev.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
     );
   };
 
-  // update qty
+  const handleSelectAll = () => {
+    const newValue = !selectAll;
+    setSelectAll(newValue);
+    setCartItems((prev) => prev.map((item) => ({ ...item, checked: newValue })));
+  };
+
   const handleQtyChange = async (productId: string, type: "inc" | "dec") => {
     const ref = cartCollectionRefForUser();
     if (!ref) return;
@@ -224,19 +161,10 @@ export default function CartScreen() {
 
       const cartDoc = snap.docs[0];
       const cartDocRef = cartDoc.ref;
-      const cartData = cartDoc.data() as {
-        products: { productId: string; quantity: number }[];
-      };
 
-      const updatedProducts = cartData.products.map((p) =>
+      const updatedProducts = cartDoc.data().products.map((p: any) =>
         p.productId === productId
-          ? {
-              ...p,
-              quantity:
-                type === "inc"
-                  ? p.quantity + 1
-                  : Math.max(1, p.quantity - 1),
-            }
+          ? { ...p, quantity: type === "inc" ? p.quantity + 1 : Math.max(1, p.quantity - 1) }
           : p
       );
 
@@ -245,13 +173,7 @@ export default function CartScreen() {
       setCartItems((prev) =>
         prev.map((item) =>
           item.id === productId
-            ? {
-                ...item,
-                qty:
-                  type === "inc"
-                    ? item.qty + 1
-                    : Math.max(1, item.qty - 1),
-              }
+            ? { ...item, qty: type === "inc" ? item.qty + 1 : Math.max(1, item.qty - 1) }
             : item
         )
       );
@@ -260,7 +182,46 @@ export default function CartScreen() {
     }
   };
 
-  // calculate total
+  const handleDelete = async (productId: string) => {
+    const ref = cartCollectionRefForUser();
+    if (!ref) return;
+    try {
+      const snap = await getDocs(ref);
+      if (snap.empty) return;
+
+      const cartDoc = snap.docs[0];
+      const cartDocRef = cartDoc.ref;
+      const cartData = cartDoc.data() as { products: { productId: string; quantity: number }[] };
+
+      const updatedProducts = cartData.products.filter((p) => p.productId !== productId);
+
+      await updateDoc(cartDocRef, { products: updatedProducts });
+
+      setCartItems((prev) => prev.filter((item) => item.id !== productId));
+    } catch (err) {
+      console.error("❌ Error deleting item:", err);
+    }
+  };
+
+  const handleBulkDelete = () => {
+    Alert.alert(
+      "Delete Selected Items",
+      "Are you sure you want to delete all selected items?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const selectedIds = cartItems.filter((i) => i.checked).map((i) => i.id);
+            for (const id of selectedIds) await handleDelete(id);
+            setSelectAll(false);
+          },
+        },
+      ]
+    );
+  };
+
   const total = useMemo(() => {
     return cartItems
       .filter((item) => item.checked)
@@ -268,7 +229,6 @@ export default function CartScreen() {
       .toFixed(2);
   }, [cartItems]);
 
-  // animation
   const checkoutVisible = useSharedValue(cartItems.length > 0 ? 1 : 0);
 
   useEffect(() => {
@@ -280,7 +240,6 @@ export default function CartScreen() {
     opacity: withTiming(checkoutVisible.value ? 1 : 0),
   }));
 
-  // next Monday
   const calculateNextMonday = () => {
     const today = new Date();
     const day = today.getDay();
@@ -290,107 +249,121 @@ export default function CartScreen() {
     return nextMonday.toDateString();
   };
 
-  // checkout
-const handleCheckout = async () => {
-  if (parseFloat(total) === 0) return;
-
-  try {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    const ref = cartCollectionRefForUser();
-    if (!ref) return;
-
-    const snap = await getDocs(ref);
-    if (snap.empty) return;
-
-    const cartDoc = snap.docs[0];
-    const cartDocRef = cartDoc.ref;
-    const cartData = cartDoc.data() as {
-      products: { productId: string; quantity: number }[];
-    };
-
+  const handleCheckout = async () => {
     const selectedItems = cartItems.filter((item) => item.checked);
-    const items: any[] = [];
-    let subtotal = 0;
 
-    for (const cartItem of selectedItems) {
-      const prodRef = doc(db, "inventory", cartItem.id);
-      const prodSnap = await getDoc(prodRef);
-      if (!prodSnap.exists()) continue;
+    if (selectedItems.length === 0) {
+      setWarningModalVisible(true);
+      return;
+    }
 
-      const prodData = prodSnap.data() as InventoryItem;
-      const totalItem = coercePrice(prodData.price) * cartItem.qty;
-      subtotal += totalItem;
+    try {
+      setLoading(true);
+      const user = auth.currentUser;
+      if (!user) return;
 
-      items.push({
-        id: prodRef, // 🔗 reference
-        name: prodData.name,
-        price: coercePrice(prodData.price),
-        quantity: cartItem.qty,
-        total: totalItem,
+      const ref = cartCollectionRefForUser();
+      if (!ref) return;
+
+      const snap = await getDocs(ref);
+      if (snap.empty) return;
+
+      const cartDoc = snap.docs[0];
+      const cartDocRef = cartDoc.ref;
+      const cartData = cartDoc.data() as { products: { productId: string; quantity: number }[] };
+
+      let subtotal = 0;
+      const items: any[] = [];
+
+      for (const cartItem of selectedItems) {
+        const prodRef = doc(db, "inventory", cartItem.id);
+        const prodSnap = await getDoc(prodRef);
+        if (!prodSnap.exists()) continue;
+
+        const prodData = prodSnap.data() as InventoryItem;
+        const totalItem = coercePrice(prodData.price) * cartItem.qty;
+        subtotal += totalItem;
+
+        items.push({
+          id: prodRef,
+          name: prodData.name,
+          price: coercePrice(prodData.price),
+          quantity: cartItem.qty,
+          total: totalItem,
+          notes: "",
+        });
+      }
+
+      const totalAmount = subtotal;
+
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+      let customerName = "Unknown";
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+        customerName = userData.name || userData.fullName || "Unknown";
+      }
+
+      await addDoc(collection(db, "transactions"), {
+        amountPaid: totalAmount,
+        customerName,
+        date: new Date(),
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        items,
         notes: "",
+        paymentMethod: "Cash",
+        paymentStatus: "Pending",
+        receiptNumber: Math.floor(1000 + Math.random() * 9000).toString(),
+        subtotal,
+        tax: 0,
+        total: totalAmount,
+        userId: user.uid,
+        userRef: userDocRef,
       });
+
+      const updatedProducts = cartData.products.filter(
+        (p) => !selectedItems.some((sel) => sel.id === p.productId)
+      );
+      await updateDoc(cartDocRef, { products: updatedProducts });
+
+      setNextBillingDate(calculateNextMonday());
+      setModalVisible(true);
+      setCartItems((prev) => prev.filter((item) => !item.checked));
+      setSelectAll(false);
+    } catch (err) {
+      console.error("❌ Checkout error:", err);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const tax = 0;
-    const totalAmount = subtotal + tax;
-
-    // ✅ Get customerName from "users" collection
-    const userDocRef = doc(db, "users", user.uid);
-    const userDocSnap = await getDoc(userDocRef);
-    let customerName = "Unknown";
-
-    if (userDocSnap.exists()) {
-      const userData = userDocSnap.data();
-      customerName = userData.name || userData.fullName || "Unknown"; 
-      // 👆 depends on what field you use in "users" collection
-    }
-
-    await addDoc(collection(db, "transactions"), {
-      amountPaid: totalAmount,
-      customerName, // ✅ now from users collection
-      date: new Date(),
-      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      items,
-      notes: "",
-      paymentMethod: "Cash",
-      paymentStatus: "Pending",
-      receiptNumber: Math.floor(1000 + Math.random() * 9000).toString(),
-      subtotal,
-      tax,
-      total: totalAmount,
-      userId: user.uid,
-      userRef: userDocRef,
-    });
-
-    // remove checked items from cart
-    const updatedProducts = cartData.products.filter(
-      (p) => !selectedItems.some((sel) => sel.id === p.productId)
-    );
-    await updateDoc(cartDocRef, { products: updatedProducts });
-
-    // modal
-    setNextBillingDate(calculateNextMonday());
-    setModalVisible(true);
-    setCartItems((prev) => prev.filter((item) => !item.checked));
-  } catch (err) {
-    console.error("❌ Checkout error:", err);
-  }
-};
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
-        <StatusBar barStyle="dark-content" backgroundColor="#f2f2f7" />
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-        {/* Header */}
+        {/* Header with same design as NotificationsScreen */}
         <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={() => router.back()}>
+          <Pressable onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={26} color="#222" />
           </Pressable>
           <Text style={styles.title}>My Cart</Text>
         </View>
+
+        {/* Select All */}
+        {cartItems.length > 0 && (
+          <Pressable style={styles.selectAllButton} onPress={handleSelectAll}>
+            <Text style={styles.selectAllText}>{selectAll ? "Deselect All" : "Select All"}</Text>
+          </Pressable>
+        )}
+
+        {/* Bulk Delete */}
+        {cartItems.some((item) => item.checked) && (
+          <Pressable style={styles.bulkButton} onPress={handleBulkDelete}>
+            <Text style={styles.bulkButtonText}>Delete Selected</Text>
+          </Pressable>
+        )}
 
         {/* Cart List */}
         <FlatList
@@ -417,40 +390,50 @@ const handleCheckout = async () => {
               <Text style={styles.emptyText}>Your cart is empty</Text>
             </View>
           )}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#1a6a37"]} />
+          }
         />
 
-        {/* Animated Checkout Bar */}
+        {/* Checkout */}
         <Animated.View style={[styles.checkoutBar, checkoutStyle]}>
           <Text style={styles.totalText}>
             Total: <Text style={styles.totalPrice}>₱{total}</Text>
           </Text>
           <Pressable style={styles.checkoutBtn} onPress={handleCheckout}>
-            <Text style={styles.checkoutText}>Checkout</Text>
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
+            {loading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Text style={styles.checkoutText}>Checkout</Text>
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
+              </>
+            )}
           </Pressable>
         </Animated.View>
 
-        {/* Modal */}
-        <Modal
-          visible={modalVisible}
-          animationType="slide"
-          transparent
-          onRequestClose={() => setModalVisible(false)}
-        >
+        {/* Purchase Modal */}
+        <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
           <View style={styles.modalBackground}>
             <View style={styles.modalContainer}>
-              <Text style={styles.modalTitle}>
-                Thank you for your purchase!
-              </Text>
-              <Text style={styles.modalText}>
-                Your next billing will be on:
-              </Text>
+              <Text style={styles.modalTitle}>Thank you for your purchase!</Text>
+              <Text style={styles.modalText}>Your next billing will be on:</Text>
               <Text style={styles.modalDate}>{nextBillingDate}</Text>
-              <Pressable
-                style={styles.modalButton}
-                onPress={() => setModalVisible(false)}
-              >
+              <Pressable style={styles.modalButton} onPress={() => setModalVisible(false)}>
                 <Text style={styles.modalButtonText}>Close</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Warning Modal */}
+        <Modal visible={warningModalVisible} animationType="fade" transparent onRequestClose={() => setWarningModalVisible(false)}>
+          <View style={styles.modalBackground}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>No items selected!</Text>
+              <Text style={styles.modalText}>Please select at least one item to checkout.</Text>
+              <Pressable style={styles.modalButton} onPress={() => setWarningModalVisible(false)}>
+                <Text style={styles.modalButtonText}>OK</Text>
               </Pressable>
             </View>
           </View>
@@ -462,20 +445,31 @@ const handleCheckout = async () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff", paddingHorizontal: 16 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 20,
-    marginBottom: 20,
-    backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+  header: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
+  title: { fontWeight: "700", color: "#222", fontSize: 20, marginLeft: 10 },
+
+  selectAllButton: {
+    backgroundColor: "#e6f5eb",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 8,
+    marginLeft: 17,
+    alignSelf: "flex-start",
   },
-  backButton: { marginRight: 12, padding: 4 },
-  title: { fontWeight: "700", color: "#222", fontSize: 20 },
+  selectAllText: { color: "#1a6a37", fontWeight: "700", fontSize: 14 },
+
+  bulkButton: {
+    backgroundColor: "#ffe5e5",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 8,
+    marginLeft: 17,
+    alignSelf: "flex-start",
+  },
+  bulkButtonText: { color: "#d11a2a", fontWeight: "700", fontSize: 14 },
+
   checkoutBar: {
     position: "absolute",
     bottom: 0,
@@ -503,50 +497,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
   },
-  checkoutText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#fff",
-    marginRight: 6,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 100,
-  },
-  emptyText: {
-    marginTop: 12,
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#888",
-  },
-  modalBackground: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContainer: {
-    width: "80%",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 24,
-    alignItems: "center",
-  },
-  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
-  modalText: { fontSize: 16, marginBottom: 8 },
-  modalDate: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 20,
-    color: "#1a6a37",
-  },
-  modalButton: {
-    backgroundColor: "#1a6a37",
-    paddingVertical: 10,
-    paddingHorizontal: 30,
-    borderRadius: 12,
-  },
-  modalButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  checkoutText: { fontSize: 15, fontWeight: "700", color: "#fff", marginRight: 6 },
+
+  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", marginTop: 100 },
+  emptyText: { marginTop: 12, fontSize: 18, fontWeight: "600", color: "#888" },
+
+  modalBackground: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
+  modalContainer: { backgroundColor: "#fff", padding: 24, borderRadius: 12, width: "80%", alignItems: "center" },
+  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12, textAlign: "center" },
+  modalText: { fontSize: 14, textAlign: "center", marginBottom: 8 },
+  modalDate: { fontSize: 16, fontWeight: "700", marginBottom: 16 },
+  modalButton: { backgroundColor: "#1a6a37", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+  modalButtonText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 });

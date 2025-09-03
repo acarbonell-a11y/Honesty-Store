@@ -1,15 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import ProductCard from "app/(main)/(users)/(userComponent)/ProductCard";
 import SearchBar from "app/(main)/(users)/(userComponent)/SearchBar";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
+  Easing,
   FlatList,
   Pressable,
+  RefreshControl,
   StatusBar,
   StyleSheet,
   Text,
@@ -18,7 +19,17 @@ import {
 
 import { db } from "config/firebaseConfig";
 import { getAuth } from "firebase/auth";
-import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, updateDoc } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+} from "firebase/firestore";
 
 interface Product {
   id: string;
@@ -46,108 +57,169 @@ const Homepage = () => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [cartCount, setCartCount] = useState(0);
+  const [refreshingProducts, setRefreshingProducts] = useState(false);
+  const [categoryVisible, setCategoryVisible] = useState(true);
 
   const router = useRouter();
   const scaleLeft = useRef(new Animated.Value(1)).current;
   const scaleRight = useRef(new Animated.Value(1)).current;
+  const flatListRef = useRef<FlatList<Product>>(null);
 
-  // 🔥 Fetch products
+  const user = getAuth().currentUser;
+  const userId = user?.uid;
+
+  const categoryAnim = useRef(new Animated.Value(1)).current;
+  const productAnim = useRef(new Animated.Value(1)).current;
+
+  const hideCategory = () => {
+    Animated.timing(categoryAnim, {
+      toValue: 0,
+      duration: 500,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: false,
+    }).start(() => {
+      setCategoryVisible(false);
+    });
+  };
+
+  const showCategory = () => {
+    setCategoryVisible(true);
+    Animated.timing(categoryAnim, {
+      toValue: 1,
+      duration: 500,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const animateProducts = () => {
+    productAnim.setValue(0);
+    Animated.timing(productAnim, {
+      toValue: 1,
+      duration: 600,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // Fetch products
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const q = query(collection(db, "inventory"), orderBy("createdAt", "desc"));
-        const snapshot = await getDocs(q);
-
-        const items: Product[] = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          name: docSnap.data().name,
-          price: docSnap.data().price.toString(),
-          image: docSnap.data().imageUrl || undefined,
-          category: docSnap.data().category,
-          quantity: docSnap.data().quantity,
-        }));
-
-        setProducts(items);
-      } catch (err) {
-        console.error("Error fetching products:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProducts();
+    const q = query(collection(db, "inventory"), orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const items: Product[] = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        name: docSnap.data().name,
+        price: docSnap.data().price.toString(),
+        image: docSnap.data().imageUrl || undefined,
+        category: docSnap.data().category,
+        quantity: docSnap.data().quantity,
+      }));
+      setProducts(items);
+      setLoading(false);
+      setRefreshingProducts(false);
+      animateProducts();
+    });
+    return () => unsubscribe();
   }, []);
 
-  // 🔥 Add to Cart with stock check
+  useEffect(() => {
+    animateProducts();
+  }, [selectedCategory]);
+
+  // Fetch cart count
+  useEffect(() => {
+    if (!userId) return;
+    const cartRef = collection(db, "users", userId, "cart");
+    const unsubscribe = onSnapshot(cartRef, (snapshot) => {
+      if (snapshot.empty) {
+        setCartCount(0);
+        return;
+      }
+      let totalItems = 0;
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (Array.isArray(data.products)) {
+          totalItems += data.products.reduce(
+            (sum: number, p: any) => sum + p.quantity,
+            0
+          );
+        }
+      });
+      setCartCount(totalItems);
+    });
+    return () => unsubscribe();
+  }, [userId]);
+
+  // Fetch notifications count (unread only)
+  useEffect(() => {
+    if (!userId) return;
+    const notifRef = collection(db, "notifications");
+    const unsubscribe = onSnapshot(
+      query(notifRef, orderBy("createdAt", "desc")),
+      (snapshot) => {
+        let count = 0;
+        snapshot.docs.forEach((docSnap) => {
+          const data = docSnap.data() as any;
+          const readBy: string[] = data.readBy || [];
+          if (!readBy.includes(userId)) count += 1;
+        });
+        setNotificationCount(count);
+      }
+    );
+    return () => unsubscribe();
+  }, [userId]);
+
+  const onRefreshProducts = () => {
+    setRefreshingProducts(true);
+    setTimeout(() => setRefreshingProducts(false), 500);
+  };
+
   const addToCart = async (productId: string) => {
     try {
-      const user = getAuth().currentUser;
-      if (!user) {
-        console.log("⚠️ User not logged in");
-        return;
-      }
-
-      // ✅ Check product stock before adding
+      if (!userId) return;
       const productRef = doc(db, "inventory", productId);
       const productSnap = await getDoc(productRef);
-
-      if (!productSnap.exists()) {
-        Alert.alert("Error", "Product not found.");
-        return;
-      }
-
+      if (!productSnap.exists()) return;
       const productData = productSnap.data();
-      if (!productData.quantity || productData.quantity <= 0) {
-        Alert.alert("Out of Stock", "This product is currently unavailable.");
-        return;
-      }
+      if (!productData.quantity || productData.quantity <= 0) return;
 
-      const cartRef = collection(db, "users", user.uid, "cart");
+      const cartRef = collection(db, "users", userId, "cart");
       const cartSnap = await getDocs(cartRef);
 
       let cartDocRef;
-
       if (cartSnap.empty) {
-        // 🆕 create a new cart document with empty array
         const newDoc = await addDoc(cartRef, { products: [] });
         cartDocRef = newDoc;
       } else {
-        // ✅ use the first cart document
         cartDocRef = cartSnap.docs[0].ref;
       }
 
-      // get current products
       const cartDoc = cartSnap.empty ? null : cartSnap.docs[0];
       const currentProducts: { productId: string; quantity: number }[] = cartDoc
         ? cartDoc.data().products || []
         : [];
 
-      // check if product already exists in cart
-      const existingIndex = currentProducts.findIndex((p) => p.productId === productId);
-
+      const existingIndex = currentProducts.findIndex(
+        (p) => p.productId === productId
+      );
       if (existingIndex !== -1) {
-        // 🔼 increase quantity
         currentProducts[existingIndex].quantity += 1;
       } else {
-        // ➕ push new product
-        currentProducts.push({
-          productId,
-          quantity: 1,
-        });
+        currentProducts.push({ productId, quantity: 1 });
       }
 
-      // save back to Firestore
       await updateDoc(cartDocRef, { products: currentProducts });
-
-      console.log("✅ Added to cart:", productId);
     } catch (error) {
-      console.error("❌ Error adding to cart:", error);
+      console.error("Error adding to cart:", error);
     }
   };
 
-  // 🔎 Filter by search + category
   const filteredProducts = products.filter(
     (p) =>
+      p.quantity &&
+      p.quantity > 0 &&
       (!selectedCategory || p.category === selectedCategory) &&
       p.name.toLowerCase().includes(searchText.toLowerCase())
   );
@@ -157,7 +229,7 @@ const Homepage = () => {
     { id: "2", name: "Beverages", icon: "cafe-outline" },
     { id: "3", name: "Foods", icon: "fast-food-outline" },
     { id: "4", name: "Fruits", icon: "nutrition-outline" },
-    { id: "5", name: "Others", icon: "ice-cream-outline" },
+    { id: "5", name: "Others", icon: "layers-outline" },
   ];
 
   const handlePressIn = (scale: Animated.Value) => {
@@ -165,7 +237,11 @@ const Homepage = () => {
   };
 
   const handlePressOut = (scale: Animated.Value) => {
-    Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
+    Animated.spring(scale, {
+      toValue: 1,
+      friction: 4,
+      useNativeDriver: true,
+    }).start();
   };
 
   const renderIcon = (
@@ -181,14 +257,22 @@ const Homepage = () => {
       style={styles.iconWrapper}
     >
       <Animated.View style={{ transform: [{ scale }] }}>
-        <Ionicons name={iconName} size={28} color="#000" />
+        <Ionicons name={iconName} size={28} color="#fff" />
         {badgeCount > 0 && (
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>{badgeCount}</Text>
+            <Text style={styles.badgeText}>
+              {badgeCount > 99 ? "99+" : badgeCount}
+            </Text>
           </View>
         )}
       </Animated.View>
     </Pressable>
+  );
+
+  useFocusEffect(
+    React.useCallback(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }, [])
   );
 
   if (loading) {
@@ -201,66 +285,141 @@ const Homepage = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="light-content" backgroundColor="#1a6a37" />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Shopnesty</Text>
-        <View style={styles.iconContainer}>
-          {renderIcon("notifications-outline", 0, scaleLeft, () =>
-            router.push("/(main)/(users)/(userHidComps)/NotifacationScreen")
-          )}
-          {renderIcon("cart-outline", 0, scaleRight, () =>
-            router.push("/(main)/(users)/(userHidComps)/CartScreen")
-          )}
+      {/* Header + Category Background */}
+      <Animated.View
+        style={{
+          backgroundColor: "#1a6a37",
+          borderBottomLeftRadius: 20,
+          borderBottomRightRadius: 20,
+          paddingHorizontal: 17,
+          paddingTop: 45,
+          paddingBottom: 10,
+        }}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: "#fff" }]}>Shopnesty</Text>
+          <View style={styles.iconContainer}>
+            {renderIcon("notifications-outline", notificationCount, scaleLeft, () =>
+              router.push("/(main)/(users)/(userHidComps)/NotifacationScreen")
+            )}
+            {renderIcon("cart-outline", cartCount, scaleRight, () =>
+              router.push("/(main)/(users)/(userHidComps)/CartScreen")
+            )}
+          </View>
         </View>
-      </View>
 
-      {/* Search */}
-      <SearchBar value={searchText} onChangeText={setSearchText} />
+        {/* Search */}
+        <SearchBar value={searchText} onChangeText={setSearchText} />
 
-      {/* Categories */}
-      <View style={{ marginBottom: 10 }}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={categories}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => setSelectedCategory(item.name)}
-              style={{ marginRight: 25, alignItems: "center" }}
-            >
-              <Ionicons name={item.icon as any} size={28} color="#1a6a37" />
-              <Text style={{ marginTop: 5, fontWeight: "600", color: "#333" }}>{item.name}</Text>
-            </Pressable>
+        {/* Category List */}
+        <Animated.View
+          style={{
+            opacity: categoryAnim,
+            height: categoryAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, 70],
+            }),
+          }}
+        >
+          {categoryVisible && (
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={categories}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => {
+                    setSelectedCategory(item.name);
+                    hideCategory();
+                  }}
+                  style={{ marginRight: 25, alignItems: "center" }}
+                >
+                  <Ionicons name={item.icon as any} size={28} color="#fff" />
+                  <Text
+                    style={{
+                      marginTop: 5,
+                      fontWeight: "600",
+                      color: "#fff",
+                    }}
+                  >
+                    {item.name}
+                  </Text>
+                </Pressable>
+              )}
+            />
           )}
-        />
-      </View>
+        </Animated.View>
+      </Animated.View>
 
       {/* Products Grid */}
-      <View style={{ flex: 1 }}>
+      <Animated.View
+        style={{
+          flex: 1,
+          opacity: productAnim,
+          transform: [
+            {
+              translateY: productAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [30, 0],
+              }),
+            },
+          ],
+          paddingHorizontal: 17,
+          marginTop: 10,
+        }}
+      >
         {selectedCategory && (
           <Pressable
-            onPress={() => setSelectedCategory(null)}
-            style={{ marginBottom: 10, flexDirection: "row", alignItems: "center" }}
+            onPress={() => {
+              setSelectedCategory(null);
+              showCategory();
+            }}
+            style={{
+              marginBottom: 10,
+              flexDirection: "row",
+              alignItems: "center",
+            }}
           >
             <Ionicons name="chevron-back" size={28} color="#1a6a37" />
-            <Text style={{ fontSize: 22, fontWeight: "bold", color: "#1a6a37", marginLeft: 5 }}>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "bold",
+                color: "#1a6a37",
+                marginLeft: 5,
+              }}
+            >
               {selectedCategory}
             </Text>
           </Pressable>
         )}
 
-        <Text style={{ fontSize: 22, fontWeight: "bold", color: "#1a6a37", marginBottom: 10 }}>
-          {selectedCategory ? `${selectedCategory} Products` : "All Products"}
-        </Text>
+        {!selectedCategory && (
+          <Text
+            style={{
+              fontSize: 22,
+              fontWeight: "bold",
+              color: "#1a6a37",
+              marginBottom: 10,
+            }}
+          >
+            All Products
+          </Text>
+        )}
 
         <FlatList
+          ref={flatListRef}
           data={filteredProducts}
           keyExtractor={(item) => item.id}
           numColumns={2}
-          columnWrapperStyle={{ justifyContent: "space-between", marginBottom: 15 }}
+          columnWrapperStyle={{
+            justifyContent: "space-between",
+            marginBottom: 15,
+          }}
           renderItem={({ item }) => (
             <View style={{ width: cardWidth }}>
               <ProductCard
@@ -270,24 +429,48 @@ const Homepage = () => {
                 stock={item.quantity}
                 category={item.category}
                 image={item.image}
-                onAddToCart={() => addToCart(item.id)} // ✅ stock check now included
+                onAddToCart={async () => await addToCart(item.id)}
               />
             </View>
           )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshingProducts}
+              onRefresh={onRefreshProducts}
+              colors={["#1a6a37"]}
+            />
+          }
         />
-      </View>
+      </Animated.View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", paddingHorizontal: 17, paddingTop: 45 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },
-  title: { fontWeight: "800", color: "#000", fontSize: 30 },
-  iconContainer: { flexDirection: "row", alignItems: "center", marginBottom: 25 },
-  iconWrapper: { marginHorizontal: 10 },
-  badge: { position: "absolute", top: -5, right: -5, backgroundColor: "#1a6a37", width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center" },
-  badgeText: { color: "#fff", fontSize: 10, fontWeight: "bold" },
+  container: { flex: 1, backgroundColor: "#fff" },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  title: { fontWeight: "800", fontSize: 30 },
+  iconContainer: { flexDirection: "row", alignItems: "center" },
+  iconWrapper: { marginLeft: 15 },
+  badge: {
+    position: "absolute",
+    top: -6,
+    right: -10,
+    backgroundColor: "white",
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+
+  },
+  badgeText: { color: "#1a6a37", fontSize: 10, fontWeight: "bold" },
 });
 
 export default Homepage;

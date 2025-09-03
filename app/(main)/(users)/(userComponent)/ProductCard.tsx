@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Image,
@@ -14,17 +15,16 @@ import {
 type ProductCardProps = {
   title: string;
   description?: string;
-  price: string;
-  stock?: number;
+  price: string | number;
   category?: string;
-  onAddToCart?: () => void;
-  onBuyNow?: () => void;
+  stock?: number;
+  onAddToCart?: () => Promise<void>; // ✅ async action
   image?: string;
 };
 
 const screenWidth = Dimensions.get("window").width;
-const horizontalPadding = 34; // left + right padding from parent
-const columnGap = 15; // gap between cards
+const horizontalPadding = 34;
+const columnGap = 15;
 const numColumns = 2;
 const cardWidth = (screenWidth - horizontalPadding - columnGap) / numColumns;
 
@@ -32,12 +32,14 @@ export default function ProductCard({
   title,
   description,
   price,
-  stock,
   category,
+  stock,
   onAddToCart,
   image,
 }: ProductCardProps) {
   const [modalVisible, setModalVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false); // ✅ success state
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const cardScale = useRef(new Animated.Value(1)).current;
 
@@ -52,26 +54,36 @@ export default function ProductCard({
     );
   };
 
-  const pricePHP = `₱${parseFloat(price).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
+  const handleAddToCart = async () => {
+    if (!onAddToCart) return;
+    setLoading(true);
+    try {
+      await onAddToCart();
+      setLoading(false);
+      setSuccess(true); // ✅ show success
+      setTimeout(() => {
+        setSuccess(false);
+        closeModal(); // ✅ close after 1 sec
+      }, 1000);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  };
+
+  const pricePHP = `₱${parseFloat(price.toString()).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+  })}`;
 
   return (
     <>
+      {/* Card */}
       <Pressable
         onPress={openModal}
         onPressIn={() => Animated.spring(cardScale, { toValue: 0.97, useNativeDriver: true }).start()}
         onPressOut={() => Animated.spring(cardScale, { toValue: 1, useNativeDriver: true }).start()}
       >
-        <Animated.View
-          style={[
-            styles.card,
-            {
-              transform: [{ scale: cardScale }],
-              width: cardWidth,
-              borderWidth: stock === 0 ? 2 : 0,
-              borderColor: stock === 0 ? "red" : "transparent",
-            },
-          ]}
-        >
+        <Animated.View style={[styles.card, { transform: [{ scale: cardScale }], width: cardWidth }]}>
           <Image
             source={image ? { uri: image } : require("./image.png")}
             style={styles.image}
@@ -80,12 +92,13 @@ export default function ProductCard({
           <View style={styles.infoContainer}>
             <Text style={styles.title} numberOfLines={1}>{title}</Text>
             <Text style={styles.price}>{pricePHP}</Text>
+            {category && <Text style={styles.category}>Category: {category}</Text>}
             {stock !== undefined && <Text style={styles.stock}>Stock: {stock}</Text>}
-            {category && <Text style={styles.stock}>Category: {category}</Text>}
           </View>
         </Animated.View>
       </Pressable>
 
+      {/* Modal */}
       <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={closeModal}>
         <View style={styles.modalBackground}>
           <Animated.View style={[styles.modalContainer, { transform: [{ scale: scaleAnim }] }]}>
@@ -95,27 +108,28 @@ export default function ProductCard({
               resizeMode="cover"
             />
             <Text style={styles.modalTitle}>{title}</Text>
-            {description && <Text style={styles.modalDescription}>{description}</Text>}
+            {description && <Text style={styles.modalDescription}>{description.toString()}</Text>}
             <Text style={styles.modalPrice}>Price: {pricePHP}</Text>
+            {category && <Text style={styles.modalCategory}>Category: {category}</Text>}
             {stock !== undefined && <Text style={styles.modalStock}>Stock: {stock}</Text>}
-            {category && <Text style={styles.modalStock}>Category: {category}</Text>}
 
             <View style={styles.buttonRow}>
               <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  { backgroundColor: stock === 0 ? "#ccc" : "#60d38aff" },
-                ]}
-                onPress={stock === 0 ? undefined : onAddToCart}
-                disabled={stock === 0}
+                style={[styles.modalButton, { backgroundColor: "#1a6a37" }]}
+                onPress={handleAddToCart}
+                disabled={loading || success} // ✅ disable while loading or success
               >
-                <Text style={styles.modalButtonText}>
-                  {stock === 0 ? "Out of Stock" : "Add to Cart"}
-                </Text>
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : success ? (
+                  <Text style={{ color: "#fff", fontWeight: "bold" }}>Added</Text>
+                ) : (
+                  <Text style={styles.modalButtonText}>Add to Cart</Text>
+                )}
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.closeButton} onPress={closeModal}>
+            <TouchableOpacity style={styles.closeButton} onPress={closeModal} disabled={loading}>
               <Text style={styles.closeButtonText}>Close</Text>
             </TouchableOpacity>
           </Animated.View>
@@ -142,6 +156,7 @@ const styles = StyleSheet.create({
   infoContainer: { padding: 12 },
   title: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 4 },
   price: { fontSize: 14, fontWeight: "bold", color: "#1a6a37", marginBottom: 2 },
+  category: { fontSize: 12, color: "#999" },
   stock: { fontSize: 12, color: "#999" },
 
   modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
@@ -149,7 +164,8 @@ const styles = StyleSheet.create({
   modalImage: { width: 220, height: 160, borderRadius: 12, marginBottom: 12 },
   modalTitle: { fontSize: 20, fontWeight: "bold", marginBottom: 8, textAlign: "center" },
   modalDescription: { fontSize: 14, color: "#666", marginBottom: 8, textAlign: "center" },
-  modalPrice: { fontSize: 16, fontWeight: "600", color: "#999", marginBottom: 6 },  
+  modalPrice: { fontSize: 16, fontWeight: "600", color: "#999", marginBottom: 6 },
+  modalCategory: { fontSize: 14, color: "#999", marginBottom: 12 },
   modalStock: { fontSize: 14, color: "#999", marginBottom: 12 },
 
   buttonRow: { flexDirection: "row", justifyContent: "space-between", width: "100%", marginBottom: 10 },

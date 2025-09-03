@@ -4,9 +4,24 @@ import NotificationCard from "app/(main)/(users)/(userComponent)/NotificationCar
 import { db } from "config/firebaseConfig";
 import { Stack, useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
-import { FlatList, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+} from "firebase/firestore";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 type Notification = {
@@ -25,24 +40,75 @@ export default function NotificationsScreen() {
 
   const [globalNotifications, setGlobalNotifications] = useState<Notification[]>([]);
   const [userNotifications, setUserNotifications] = useState<Notification[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  const timeAgo = (date: Date) => {
+    const diff = (Date.now() - date.getTime()) / 1000;
+    if (diff < 60) return `${Math.floor(diff)}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  };
+
+  const fetchNotifications = useCallback(async () => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
     const userId = currentUser.uid;
 
-    // Global notifications
-    const globalRef = query(
-      collection(db, "notifications"),
-      orderBy("createdAt", "desc")
-    );
+    try {
+      const globalSnap = await getDocs(
+        query(collection(db, "notifications"), orderBy("createdAt", "desc"))
+      );
+      const globalNotifs: Notification[] = globalSnap.docs.map((doc) => {
+        const data = doc.data() as any;
+        const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
+        return {
+          id: `global-${doc.id}`,
+          type: "global",
+          title: data.title || "",
+          message: data.message || "",
+          time: timeAgo(createdAt),
+          date: createdAt.toISOString().split("T")[0],
+          read: Array.isArray(data.readBy) ? data.readBy.includes(userId) : false,
+        };
+      });
+      setGlobalNotifications(globalNotifs);
+
+      const userSnap = await getDocs(
+        query(collection(db, "users", userId, "notifications"), orderBy("createdAt", "desc"))
+      );
+      const userNotifs: Notification[] = userSnap.docs.map((doc) => {
+        const data = doc.data() as any;
+        const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
+        return {
+          id: `user-${doc.id}`,
+          type: "user",
+          title: data.title || "",
+          message: data.message || "",
+          time: timeAgo(createdAt),
+          date: createdAt.toISOString().split("T")[0],
+          read: data.read || false,
+        };
+      });
+      setUserNotifications(userNotifs);
+    } catch (err) {
+      console.error("Failed to fetch notifications:", err);
+    }
+  }, [auth]);
+
+  useEffect(() => {
+    fetchNotifications();
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    const userId = currentUser.uid;
 
     const unsubGlobal = onSnapshot(
-      globalRef,
+      query(collection(db, "notifications"), orderBy("createdAt", "desc")),
       (snapshot) => {
         const notifs: Notification[] = snapshot.docs.map((doc) => {
           const data = doc.data() as any;
-          const createdAt = data.createdAt?.toDate?.() ?? new Date();
+          const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
           return {
             id: `global-${doc.id}`,
             type: "global",
@@ -50,26 +116,19 @@ export default function NotificationsScreen() {
             message: data.message || "",
             time: timeAgo(createdAt),
             date: createdAt.toISOString().split("T")[0],
-            read: data.readBy?.includes(userId) ?? false,
+            read: Array.isArray(data.readBy) ? data.readBy.includes(userId) : false,
           };
         });
         setGlobalNotifications(notifs);
-      },
-      (error) => console.error("Failed to fetch global notifications:", error)
-    );
-
-    // User-specific notifications
-    const userRef = query(
-      collection(db, "users", userId, "notifications"),
-      orderBy("createdAt", "desc")
+      }
     );
 
     const unsubUser = onSnapshot(
-      userRef,
+      query(collection(db, "users", userId, "notifications"), orderBy("createdAt", "desc")),
       (snapshot) => {
         const notifs: Notification[] = snapshot.docs.map((doc) => {
           const data = doc.data() as any;
-          const createdAt = data.createdAt?.toDate?.() ?? new Date();
+          const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
           return {
             id: `user-${doc.id}`,
             type: "user",
@@ -81,90 +140,94 @@ export default function NotificationsScreen() {
           };
         });
         setUserNotifications(notifs);
-      },
-      (error) => console.error("Failed to fetch user notifications:", error)
+      }
     );
 
     return () => {
       unsubGlobal();
       unsubUser();
     };
-  }, [auth]);
+  }, [auth, fetchNotifications]);
 
-  // Merge and group notifications by date
-  const notifications = [...globalNotifications, ...userNotifications];
-  const groupedNotifications: Record<string, Notification[]> = notifications.reduce((groups, notif) => {
-    if (!groups[notif.date]) groups[notif.date] = [];
-    groups[notif.date].push(notif);
-    return groups;
-  }, {} as Record<string, Notification[]>);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchNotifications();
+    setRefreshing(false);
+  };
 
-  const sortedDates = Object.keys(groupedNotifications).sort(
-    (a, b) => new Date(b).getTime() - new Date(a).getTime()
-  );
-
-  const handlePress = async (notif: Notification) => {
+  // Mark notification as read
+  const markAsRead = async (notif: Notification) => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
     const userId = currentUser.uid;
 
-    if (notif.read) return; // already read
+    if (notif.read) return;
+
     if (notif.type === "global") {
       setGlobalNotifications((prev) =>
         prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
       );
       const notifId = notif.id.replace(/^global-/, "");
-      try {
-        await markGlobalNotificationRead(notifId, userId);
-      } catch (err) {
-        console.error("Failed to mark global notification as read", err);
-      }
-    } else if (notif.type === "user") {
+      await markGlobalNotificationRead(notifId, userId).catch(console.error);
+    } else {
       setUserNotifications((prev) =>
         prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
       );
       const notifId = notif.id.replace(/^user-/, "");
-      try {
-        await markSingleUserNotificationRead(userId, notifId);
-      } catch (err) {
-        console.error("Failed to mark user notification as read", err);
-      }
+      await markSingleUserNotificationRead(userId, notifId).catch(console.error);
     }
   };
+
+  const notifications = [...globalNotifications, ...userNotifications];
+  const groupedNotifications: Record<string, Notification[]> = notifications.reduce(
+    (groups, notif) => {
+      if (!groups[notif.date]) groups[notif.date] = [];
+      groups[notif.date].push(notif);
+      return groups;
+    },
+    {} as Record<string, Notification[]>
+  );
+
+  const sortedDates = Object.keys(groupedNotifications).sort(
+    (a, b) => new Date(b).getTime() - new Date(a).getTime()
+  );
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
-        <StatusBar barStyle="dark-content" backgroundColor="#f2f2f7" />
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-        {/* Header */}
+        {/* Header with no decoration */}
         <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={() => router.back()}>
+          <Pressable onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={26} color="#222" />
           </Pressable>
           <Text style={styles.title}>Notifications</Text>
         </View>
 
-        {/* Notifications List */}
+        {/* FlatList with top and bottom spacing */}
         <FlatList
           data={sortedDates}
           keyExtractor={(date) => date}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           renderItem={({ item: date }) => (
             <View>
               <Text style={styles.dateStamp}>{new Date(date).toDateString()}</Text>
-              {groupedNotifications[date].map((n: Notification) => (
-                <Pressable
+              {groupedNotifications[date].map((n) => (
+                <NotificationCard
                   key={n.id}
-                  onPress={() => handlePress(n)}
-                  style={{ padding: 17, opacity: n.read ? 0.5 : 1 }}
-                >
-                  <NotificationCard id={n.id} title={n.title} message={n.message} time={n.time} />
-                </Pressable>
+                  id={n.id}
+                  title={n.title}
+                  message={n.message}
+                  time={n.time}
+                  read={n.read}
+                  onOpen={() => markAsRead(n)}
+                />
               ))}
             </View>
           )}
-          contentContainerStyle={{ paddingBottom: 20 }}
+          contentContainerStyle={{ paddingTop: 10, paddingBottom: 20 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
@@ -178,31 +241,14 @@ export default function NotificationsScreen() {
   );
 }
 
-// Simple "time ago" helper
-function timeAgo(date: Date) {
-  const diff = (Date.now() - date.getTime()) / 1000;
-  if (diff < 60) return `${Math.floor(diff)}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff", paddingHorizontal: 16 },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 20,
-    marginBottom: 20,
-    backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingVertical: 10,
   },
-  backButton: { marginRight: 12, padding: 4 },
-  title: { fontWeight: "700", color: "#222", fontSize: 20 },
+  title: { fontWeight: "700", color: "#222", fontSize: 20, marginLeft: 10 },
   dateStamp: {
     fontSize: 14,
     fontWeight: "600",
