@@ -9,20 +9,25 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 type ProductCardProps = {
   title: string;
   description?: string;
   price: string | number;
+  price: string | number;
   category?: string;
+  stock?: number;
+  onAddToCart?: () => Promise<void>; // ✅ async action
   stock?: number;
   onAddToCart?: () => Promise<void>; // ✅ async action
   image?: string;
 };
 
 const screenWidth = Dimensions.get("window").width;
+const horizontalPadding = 34;
+const columnGap = 15;
 const horizontalPadding = 34;
 const columnGap = 15;
 const numColumns = 2;
@@ -34,10 +39,13 @@ export default function ProductCard({
   price,
   category,
   stock,
+  stock,
   onAddToCart,
   image,
 }: ProductCardProps) {
   const [modalVisible, setModalVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false); // ✅ success state
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false); // ✅ success state
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -87,6 +95,7 @@ export default function ProductCard({
   return (
     <>
       {/* Card */}
+      {/* Card */}
       <Pressable
         onPress={openModal}
         onPressIn={() => Animated.spring(cardScale, { toValue: 0.97, useNativeDriver: true }).start()}
@@ -110,11 +119,13 @@ export default function ProductCard({
             <Text style={styles.title} numberOfLines={1}>{title}</Text>
             <Text style={styles.price}>{pricePHP}</Text>
             {category && <Text style={styles.category}>Category: {category}</Text>}
+            {category && <Text style={styles.category}>Category: {category}</Text>}
             {stock !== undefined && <Text style={styles.stock}>Stock: {stock}</Text>}
           </View>
         </Animated.View>
       </Pressable>
 
+      {/* Modal */}
       {/* Modal */}
       <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={closeModal}>
         <View style={styles.modalBackground}>
@@ -126,7 +137,9 @@ export default function ProductCard({
             />
             <Text style={styles.modalTitle}>{title}</Text>
             {description && <Text style={styles.modalDescription}>{description.toString()}</Text>}
+            {description && <Text style={styles.modalDescription}>{description.toString()}</Text>}
             <Text style={styles.modalPrice}>Price: {pricePHP}</Text>
+            {category && <Text style={styles.modalCategory}>Category: {category}</Text>}
             {category && <Text style={styles.modalCategory}>Category: {category}</Text>}
             {stock !== undefined && <Text style={styles.modalStock}>Stock: {stock}</Text>}
 
@@ -160,6 +173,7 @@ export default function ProductCard({
             </View>
 
             <TouchableOpacity style={styles.closeButton} onPress={closeModal} disabled={loading}>
+            <TouchableOpacity style={styles.closeButton} onPress={closeModal} disabled={loading}>
               <Text style={styles.closeButtonText}>Close</Text>
             </TouchableOpacity>
           </Animated.View>
@@ -187,6 +201,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 4 },
   price: { fontSize: 14, fontWeight: "bold", color: "#1a6a37", marginBottom: 2 },
   category: { fontSize: 12, color: "#999" },
+  category: { fontSize: 12, color: "#999" },
   stock: { fontSize: 12, color: "#999" },
 
   modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
@@ -194,6 +209,8 @@ const styles = StyleSheet.create({
   modalImage: { width: 220, height: 160, borderRadius: 12, marginBottom: 12 },
   modalTitle: { fontSize: 20, fontWeight: "bold", marginBottom: 8, textAlign: "center" },
   modalDescription: { fontSize: 14, color: "#666", marginBottom: 8, textAlign: "center" },
+  modalPrice: { fontSize: 16, fontWeight: "600", color: "#999", marginBottom: 6 },
+  modalCategory: { fontSize: 14, color: "#999", marginBottom: 12 },
   modalPrice: { fontSize: 16, fontWeight: "600", color: "#999", marginBottom: 6 },
   modalCategory: { fontSize: 14, color: "#999", marginBottom: 12 },
   modalStock: { fontSize: 14, color: "#999", marginBottom: 12 },

@@ -19,7 +19,6 @@ import {
 const SettingsScreen: React.FC = () => {
   const [username, setUsername] = useState("");
   const [newUsername, setNewUsername] = useState("");
-  const [themeDark, setThemeDark] = useState(false);
 
   const user = auth.currentUser;
 
@@ -27,8 +26,13 @@ const SettingsScreen: React.FC = () => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
   useEffect(() => {
     if (user) fetchProfile();
+    animateScreen();
     animateScreen();
   }, [user]);
 
@@ -41,6 +45,24 @@ const SettingsScreen: React.FC = () => {
     }
   };
 
+  const animateScreen = () => {
+    fadeAnim.setValue(0);
+    slideAnim.setValue(30);
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
   const animateScreen = () => {
     fadeAnim.setValue(0);
     slideAnim.setValue(30);

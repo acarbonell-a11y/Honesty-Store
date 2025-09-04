@@ -22,6 +22,24 @@ import {
   Text,
   View,
 } from "react-native";
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+} from "firebase/firestore";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 type Notification = {
@@ -102,16 +120,19 @@ export default function NotificationsScreen() {
   useEffect(() => {
     fetchNotifications();
 
+    fetchNotifications();
+
     const currentUser = auth.currentUser;
     if (!currentUser) return;
     const userId = currentUser.uid;
 
     const unsubGlobal = onSnapshot(
       query(collection(db, "notifications"), orderBy("createdAt", "desc")),
+      query(collection(db, "notifications"), orderBy("createdAt", "desc")),
       (snapshot) => {
         const notifs: Notification[] = snapshot.docs.map((doc) => {
           const data = doc.data() as any;
-          const createdAt = data.createdAt?.toDate?.() ?? new Date();
+          const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
           return {
             id: `global-${doc.id}`,
             type: "global",
@@ -119,6 +140,7 @@ export default function NotificationsScreen() {
             message: data.message || "",
             time: timeAgo(createdAt),
             date: createdAt.toISOString().split("T")[0],
+            read: Array.isArray(data.readBy) ? data.readBy.includes(userId) : false,
             read: Array.isArray(data.readBy) ? data.readBy.includes(userId) : false,
           };
         });
@@ -129,10 +151,11 @@ export default function NotificationsScreen() {
 
     const unsubUser = onSnapshot(
       query(collection(db, "users", userId, "notifications"), orderBy("createdAt", "desc")),
+      query(collection(db, "users", userId, "notifications"), orderBy("createdAt", "desc")),
       (snapshot) => {
         const notifs: Notification[] = snapshot.docs.map((doc) => {
           const data = doc.data() as any;
-          const createdAt = data.createdAt?.toDate?.() ?? new Date();
+          const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
           return {
             id: `user-${doc.id}`,
             type: "user",
@@ -144,8 +167,7 @@ export default function NotificationsScreen() {
           };
         });
         setUserNotifications(notifs);
-      },
-      (error) => console.error("Failed to fetch user notifications:", error)
+      }
     );
 
     return () => {
@@ -169,11 +191,15 @@ export default function NotificationsScreen() {
 
     if (notif.read) return;
 
+    if (notif.read) return;
+
     if (notif.type === "global") {
       setGlobalNotifications((prev) =>
         prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
       );
       const notifId = notif.id.replace(/^global-/, "");
+      await markGlobalNotificationRead(notifId, userId).catch(console.error);
+    } else {
       await markGlobalNotificationRead(notifId, userId).catch(console.error);
     } else {
       setUserNotifications((prev) =>
@@ -204,9 +230,11 @@ export default function NotificationsScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
         {/* Header (clean) */}
         <View style={styles.header}>
+          <Pressable onPress={() => router.back()}>
           <Pressable onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={26} color="#222" />
           </Pressable>
@@ -218,9 +246,12 @@ export default function NotificationsScreen() {
           data={sortedDates}
           keyExtractor={(date) => date}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           renderItem={({ item: date }) => (
             <View>
               <Text style={styles.dateStamp}>{new Date(date).toDateString()}</Text>
+              {groupedNotifications[date].map((n) => (
+                <NotificationCard
               {groupedNotifications[date].map((n) => (
                 <NotificationCard
                   key={n.id}
@@ -231,9 +262,17 @@ export default function NotificationsScreen() {
                   read={n.read}
                   onOpen={() => markAsRead(n)}
                 />
+                  id={n.id}
+                  title={n.title}
+                  message={n.message}
+                  time={n.time}
+                  read={n.read}
+                  onOpen={() => markAsRead(n)}
+                />
               ))}
             </View>
           )}
+          contentContainerStyle={{ paddingTop: 10, paddingBottom: 20 }}
           contentContainerStyle={{ paddingTop: 10, paddingBottom: 20 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={() => (
@@ -253,6 +292,9 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 10,
+  },
+  title: { fontWeight: "700", color: "#222", fontSize: 20, marginLeft: 10 },
     paddingVertical: 10,
   },
   title: { fontWeight: "700", color: "#222", fontSize: 20, marginLeft: 10 },

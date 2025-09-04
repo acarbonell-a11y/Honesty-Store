@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import { default as React, default as React, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Modal,
@@ -16,6 +16,8 @@ type NotificationProps = {
   time: string;
   read?: boolean;
   onOpen?: () => void; // called when modal opens
+  read?: boolean;
+  onOpen?: () => void; // called when modal opens
 };
 
 export default function NotificationCard({
@@ -24,11 +26,22 @@ export default function NotificationCard({
   time,
   read = false,
   onOpen,
+  read = false,
+  onOpen,
 }: NotificationProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(read ? 0.5 : 1)).current;
 
   const [modalVisible, setModalVisible] = useState(false);
+
+  // Animate fade when `read` changes
+  useEffect(() => {
+    Animated.timing(opacityAnim, {
+      toValue: read ? 0.5 : 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [read]);
 
   // Animate fade when `read` changes
   useEffect(() => {
@@ -55,6 +68,7 @@ export default function NotificationCard({
 
     setModalVisible(true);
     if (onOpen) onOpen(); // mark as read after opening modal
+    if (onOpen) onOpen(); // mark as read after opening modal
   };
 
   return (
@@ -67,6 +81,11 @@ export default function NotificationCard({
       >
         <Pressable style={styles.content} onPress={handlePress}>
           <View style={styles.iconContainer}>
+            <Ionicons
+              name="notifications-outline"
+              size={28}
+              color={read ? "#999" : "#1a6a37"}
+            />
             <Ionicons
               name="notifications-outline"
               size={28}
@@ -91,12 +110,17 @@ export default function NotificationCard({
               numberOfLines={1}
               style={[styles.message, read && { color: "#aaa" }]}
             >
+            <Text
+              numberOfLines={1}
+              style={[styles.message, read && { color: "#aaa" }]}
+            >
               {message}
             </Text>
           </View>
         </Pressable>
       </Animated.View>
 
+      {/* Modal */}
       {/* Modal */}
       <Modal
         visible={modalVisible}
@@ -108,9 +132,17 @@ export default function NotificationCard({
           style={styles.modalOverlay}
           onPress={() => setModalVisible(false)}
         >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setModalVisible(false)}
+        >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{title}</Text>
             <Text style={styles.modalMessage}>{message}</Text>
+            <Pressable
+              style={styles.closeBtn}
+              onPress={() => setModalVisible(false)}
+            >
             <Pressable
               style={styles.closeBtn}
               onPress={() => setModalVisible(false)}
@@ -141,12 +173,18 @@ const styles = StyleSheet.create({
   content: { flexDirection: "row", alignItems: "center", flex: 1 },
   iconContainer: { marginRight: 12 },
   textContainer: { flex: 1 },
+  content: { flexDirection: "row", alignItems: "center", flex: 1 },
+  iconContainer: { marginRight: 12 },
+  textContainer: { flex: 1 },
   titleContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 4,
   },
+  title: { fontWeight: "600", fontSize: 15, color: "#111" },
+  message: { fontSize: 13, color: "#666" },
+  time: { fontSize: 12, color: "#999" },
   title: { fontWeight: "600", fontSize: 15, color: "#111" },
   message: { fontSize: 13, color: "#666" },
   time: { fontSize: 12, color: "#999" },

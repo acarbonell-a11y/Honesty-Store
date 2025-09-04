@@ -11,8 +11,11 @@ import {
   Animated,
   Clipboard,
   FlatList,
+  Clipboard,
+  FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   RefreshControl,
   StatusBar,
   StyleSheet,
@@ -32,6 +35,7 @@ const BillsPage = () => {
   const [searchText, setSearchText] = useState("");
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [paymentConfirmModalVisible, setPaymentConfirmModalVisible] = useState(false);
+  const [paymentConfirmModalVisible, setPaymentConfirmModalVisible] = useState(false);
   const [selectedBill, setSelectedBill] = useState<{ billNumber: string; amount: string } | null>(null);
   const [bills, setBills] = useState<Bill[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,6 +49,11 @@ const BillsPage = () => {
   const flatListRef = useRef<FlatList<Bill>>(null);
   const GCashNumber = "09959483927";
 
+  const fetchBills = async () => {
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) return;
   const fetchBills = async () => {
     try {
       const auth = getAuth();
@@ -78,6 +87,8 @@ const BillsPage = () => {
 
   useEffect(() => {
     fetchBills();
+  useEffect(() => {
+    fetchBills();
   }, []);
 
   const onRefresh = async () => {
@@ -94,15 +105,16 @@ const BillsPage = () => {
 
   const summary = useMemo(() => {
     let totalDue = 0;
-    let totalCurrent = 0;
+    let pendingCount = 0;
 
+    bills.forEach((bill) => {
     bills.forEach((bill) => {
       const amount = parseFloat(bill.amount);
       if (bill.status === "Paid") totalCurrent += amount;
       else totalDue += amount;
     });
 
-    return { totalDue, totalCurrent };
+    return { totalDue, totalBills: pendingCount };
   }, [bills]);
 
   const handlePressIn = (scale: Animated.Value) => {
@@ -161,6 +173,7 @@ const BillsPage = () => {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#1a6a37" />
       <StatusBar barStyle="light-content" backgroundColor="#1a6a37" />
 
       {/* Header Background */}
@@ -231,7 +244,10 @@ const BillsPage = () => {
       <Modal transparent visible={paymentModalVisible} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Payment Method</Text>
+            <Text style={{ fontSize: 16, marginBottom: 20 }}>
             <Text style={{ fontSize: 16, marginBottom: 20 }}>
               {selectedBill?.billNumber}: ₱{selectedBill?.amount}
             </Text>

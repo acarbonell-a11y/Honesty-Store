@@ -2,14 +2,17 @@ import { Ionicons } from "@expo/vector-icons";
 import ProductCard from "app/(main)/(users)/(userComponent)/ProductCard";
 import SearchBar from "app/(main)/(users)/(userComponent)/SearchBar";
 import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
+  Easing,
   FlatList,
   Pressable,
+  RefreshControl,
   RefreshControl,
   StatusBar,
   StyleSheet,
@@ -55,6 +58,10 @@ const Homepage = () => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [cartCount, setCartCount] = useState(0);
+  const [refreshingProducts, setRefreshingProducts] = useState(false);
+  const [categoryVisible, setCategoryVisible] = useState(true);
   const [notificationCount, setNotificationCount] = useState(0);
   const [cartCount, setCartCount] = useState(0);
   const [refreshingProducts, setRefreshingProducts] = useState(false);
@@ -215,6 +222,8 @@ const addToCart = async (productId: string) => {
     (p) =>
       p.quantity &&
       p.quantity > 0 &&
+      p.quantity &&
+      p.quantity > 0 &&
       (!selectedCategory || p.category === selectedCategory) &&
       p.name.toLowerCase().includes(searchText.toLowerCase())
   );
@@ -225,12 +234,18 @@ const addToCart = async (productId: string) => {
     { id: "3", name: "Foods", icon: "fast-food-outline" },
     { id: "4", name: "Fruits", icon: "nutrition-outline" },
     { id: "5", name: "Others", icon: "layers-outline" },
+    { id: "5", name: "Others", icon: "layers-outline" },
   ];
 
   const handlePressIn = (scale: Animated.Value) => {
     Animated.spring(scale, { toValue: 0.9, useNativeDriver: true }).start();
   };
   const handlePressOut = (scale: Animated.Value) => {
+    Animated.spring(scale, {
+      toValue: 1,
+      friction: 4,
+      useNativeDriver: true,
+    }).start();
     Animated.spring(scale, {
       toValue: 1,
       friction: 4,
@@ -252,6 +267,7 @@ const addToCart = async (productId: string) => {
     >
       <Animated.View style={{ transform: [{ scale }] }}>
         <Ionicons name={iconName} size={28} color="#fff" />
+        <Ionicons name={iconName} size={28} color="#fff" />
         {badgeCount > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{badgeCount > 99 ? "99+" : badgeCount}</Text>
@@ -259,6 +275,12 @@ const addToCart = async (productId: string) => {
         )}
       </Animated.View>
     </Pressable>
+  );
+
+  useFocusEffect(
+    React.useCallback(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }, [])
   );
 
   useFocusEffect(
@@ -277,6 +299,7 @@ const addToCart = async (productId: string) => {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#1a6a37" />
       <StatusBar barStyle="light-content" backgroundColor="#1a6a37" />
 
       {/* Header & Categories */}
@@ -352,10 +375,14 @@ const addToCart = async (productId: string) => {
 
         <FlatList
           ref={flatListRef}
+          ref={flatListRef}
           data={filteredProducts}
           keyExtractor={(item) => item.id}
           numColumns={2}
-          columnWrapperStyle={{ justifyContent: "space-between", marginBottom: 15 }}
+          columnWrapperStyle={{
+            justifyContent: "space-between",
+            marginBottom: 15,
+          }}
           renderItem={({ item }) => (
             <View style={{ width: cardWidth }}>
               <ProductCard
@@ -366,11 +393,13 @@ const addToCart = async (productId: string) => {
                 category={item.category}
                 image={item.image}
                 onAddToCart={async () => await addToCart(item.id)}
+                onAddToCart={async () => await addToCart(item.id)}
               />
             </View>
           )}
           refreshControl={<RefreshControl refreshing={refreshingProducts} onRefresh={onRefreshProducts} colors={["#1a6a37"]} />}
         />
+      </Animated.View>
       </Animated.View>
     </View>
   );
