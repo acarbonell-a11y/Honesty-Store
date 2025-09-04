@@ -7,18 +7,15 @@ import { getUserProfileFireBase, getUserTransactions, uploadImageToCloudinary } 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
-  Alert,
   Animated,
   FlatList,
   Modal,
-  Modal,
   Pressable,
-  RefreshControl,
   RefreshControl,
   StatusBar,
   StyleSheet,
   Text,
-  View
+  View,
 } from "react-native";
 
 type Transaction = {
@@ -27,13 +24,10 @@ type Transaction = {
   amount: number;
   status: "Paid" | "Unpaid";
   time: string;
-  time: string;
 };
 
 const ProfileScreen = () => {
   const scaleRight = useRef(new Animated.Value(1)).current;
-  const scaleProfile = useRef(new Animated.Value(1)).current;
-
   const scaleProfile = useRef(new Animated.Value(1)).current;
 
   const [userData, setUserData] = useState<{ name: string; email: string } | null>(null);
@@ -261,11 +255,10 @@ const takePhoto = async () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Profile</Text>
         {renderIcon("settings-outline", scaleRight, () =>
-          router.push("/(main)/(users)/(userHidComps)/Settings")
-        )}
           router.push("/(main)/(users)/(userHidComps)/Settings")
         )}
       </View>
@@ -342,6 +335,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },
   title: { fontWeight: "800", color: "#000", fontSize: 30 },
   iconWrapper: { marginHorizontal: 10 },
+
   profileSection: { alignItems: "center", marginVertical: 20 },
   avatarContainer: {
     width: 120,
@@ -361,6 +355,7 @@ const styles = StyleSheet.create({
   avatar: { width: 110, height: 110, borderRadius: 55 },
   name: { fontSize: 22, fontWeight: "bold", color: "#1a6a37" },
   email: { fontSize: 16, color: "#555" },
+
   balanceCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -376,7 +371,9 @@ const styles = StyleSheet.create({
   },
   balanceLabel: { fontSize: 16, fontWeight: "600", color: "#444" },
   balanceAmount: { fontSize: 22, fontWeight: "800", color: "#1a6a37" },
+
   sectionTitle: { fontSize: 18, fontWeight: "700", color: "#000", marginBottom: 10 },
+
   historyCard: {
     flexDirection: "row",
     justifyContent: "space-between",

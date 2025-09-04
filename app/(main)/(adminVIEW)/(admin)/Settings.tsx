@@ -82,8 +82,6 @@ const SettingsScreen: React.FC = () => {
     }
   };
 
-  const toggleTheme = () => setThemeDark(!themeDark);
-
   return (
     <View
       style={[

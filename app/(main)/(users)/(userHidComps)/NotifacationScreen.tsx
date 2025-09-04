@@ -22,24 +22,6 @@ import {
   Text,
   View,
 } from "react-native";
-import {
-  collection,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-} from "firebase/firestore";
-import React, { useCallback, useEffect, useState } from "react";
-import {
-  FlatList,
-  Pressable,
-  RefreshControl,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 type Notification = {
@@ -60,7 +42,6 @@ export default function NotificationsScreen() {
   const [userNotifications, setUserNotifications] = useState<Notification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  // "time ago" helper
   const timeAgo = (date: Date) => {
     const diff = (Date.now() - date.getTime()) / 1000;
     if (diff < 60) return `${Math.floor(diff)}s ago`;
@@ -69,7 +50,7 @@ export default function NotificationsScreen() {
     return `${Math.floor(diff / 86400)}d ago`;
   };
 
-  // One-time fetch (for refresh)
+  // Fetch notifications once
   const fetchNotifications = useCallback(async () => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
@@ -116,10 +97,8 @@ export default function NotificationsScreen() {
     }
   }, [auth]);
 
-  // Real-time updates + initial fetch
+  // Real-time updates
   useEffect(() => {
-    fetchNotifications();
-
     fetchNotifications();
 
     const currentUser = auth.currentUser;
@@ -128,11 +107,10 @@ export default function NotificationsScreen() {
 
     const unsubGlobal = onSnapshot(
       query(collection(db, "notifications"), orderBy("createdAt", "desc")),
-      query(collection(db, "notifications"), orderBy("createdAt", "desc")),
       (snapshot) => {
         const notifs: Notification[] = snapshot.docs.map((doc) => {
           const data = doc.data() as any;
-          const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
+          const createdAt = data.createdAt?.toDate?.() ?? new Date();
           return {
             id: `global-${doc.id}`,
             type: "global",
@@ -140,7 +118,6 @@ export default function NotificationsScreen() {
             message: data.message || "",
             time: timeAgo(createdAt),
             date: createdAt.toISOString().split("T")[0],
-            read: Array.isArray(data.readBy) ? data.readBy.includes(userId) : false,
             read: Array.isArray(data.readBy) ? data.readBy.includes(userId) : false,
           };
         });
@@ -151,11 +128,10 @@ export default function NotificationsScreen() {
 
     const unsubUser = onSnapshot(
       query(collection(db, "users", userId, "notifications"), orderBy("createdAt", "desc")),
-      query(collection(db, "users", userId, "notifications"), orderBy("createdAt", "desc")),
       (snapshot) => {
         const notifs: Notification[] = snapshot.docs.map((doc) => {
           const data = doc.data() as any;
-          const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
+          const createdAt = data.createdAt?.toDate?.() ?? new Date();
           return {
             id: `user-${doc.id}`,
             type: "user",
@@ -167,7 +143,8 @@ export default function NotificationsScreen() {
           };
         });
         setUserNotifications(notifs);
-      }
+      },
+      (error) => console.error("Failed to fetch user notifications:", error)
     );
 
     return () => {
@@ -176,20 +153,16 @@ export default function NotificationsScreen() {
     };
   }, [auth, fetchNotifications]);
 
-  // Pull-to-refresh
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchNotifications();
     setRefreshing(false);
   };
 
-  // Mark as read
   const markAsRead = async (notif: Notification) => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
     const userId = currentUser.uid;
-
-    if (notif.read) return;
 
     if (notif.read) return;
 
@@ -198,8 +171,6 @@ export default function NotificationsScreen() {
         prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
       );
       const notifId = notif.id.replace(/^global-/, "");
-      await markGlobalNotificationRead(notifId, userId).catch(console.error);
-    } else {
       await markGlobalNotificationRead(notifId, userId).catch(console.error);
     } else {
       setUserNotifications((prev) =>
@@ -230,28 +201,21 @@ export default function NotificationsScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-        {/* Header (clean) */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()}>
           <Pressable onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={26} color="#222" />
           </Pressable>
           <Text style={styles.title}>Notifications</Text>
         </View>
 
-        {/* FlatList with refresh + spacing */}
         <FlatList
           data={sortedDates}
           keyExtractor={(date) => date}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           renderItem={({ item: date }) => (
             <View>
               <Text style={styles.dateStamp}>{new Date(date).toDateString()}</Text>
-              {groupedNotifications[date].map((n) => (
-                <NotificationCard
               {groupedNotifications[date].map((n) => (
                 <NotificationCard
                   key={n.id}
@@ -262,17 +226,9 @@ export default function NotificationsScreen() {
                   read={n.read}
                   onOpen={() => markAsRead(n)}
                 />
-                  id={n.id}
-                  title={n.title}
-                  message={n.message}
-                  time={n.time}
-                  read={n.read}
-                  onOpen={() => markAsRead(n)}
-                />
               ))}
             </View>
           )}
-          contentContainerStyle={{ paddingTop: 10, paddingBottom: 20 }}
           contentContainerStyle={{ paddingTop: 10, paddingBottom: 20 }}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={() => (
@@ -292,9 +248,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-  },
-  title: { fontWeight: "700", color: "#222", fontSize: 20, marginLeft: 10 },
     paddingVertical: 10,
   },
   title: { fontWeight: "700", color: "#222", fontSize: 20, marginLeft: 10 },

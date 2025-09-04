@@ -16,7 +16,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  View
+  View,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -38,18 +38,13 @@ type CartItem = {
 };
 
 const coercePrice = (p: number | string): number => (typeof p === "number" ? p : parseFloat(p));
-const coercePrice = (p: number | string): number => (typeof p === "number" ? p : parseFloat(p));
 
 export default function CartScreen() {
   const router = useRouter();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [warningModalVisible, setWarningModalVisible] = useState(false);
-  const [warningModalVisible, setWarningModalVisible] = useState(false);
   const [nextBillingDate, setNextBillingDate] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectAll, setSelectAll] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -115,7 +110,6 @@ export default function CartScreen() {
 
       const resolved: CartItem[] = [];
       for (const cartDoc of snap.docs) {
-        const data = cartDoc.data() as { products: { productId: string; quantity: number }[] };
         const data = cartDoc.data() as { products: { productId: string; quantity: number }[] };
         if (!data.products) continue;
 
@@ -317,14 +311,14 @@ setCartItems((prev) =>
     let subtotal = 0;
     const transactionItems: Transaction["items"] = [];
 
-      for (const cartItem of selectedItems) {
-        const prodRef = doc(db, "inventory", cartItem.id);
-        const prodSnap = await getDoc(prodRef);
-        if (!prodSnap.exists()) continue;
+    for (const cartItem of selectedItems) {
+      const prodRef = doc(db, "inventory", cartItem.id);
+      const prodSnap = await getDoc(prodRef);
+      if (!prodSnap.exists()) continue;
 
-        const prodData = prodSnap.data() as InventoryItem;
-        const totalItem = coercePrice(prodData.price) * cartItem.qty;
-        subtotal += totalItem;
+      const prodData = prodSnap.data() as InventoryItem;
+      const totalItem = coercePrice(prodData.price) * cartItem.qty;
+      subtotal += totalItem;
 
       transactionItems.push({
         itemId: prodRef.id, // Using the document ID
@@ -334,7 +328,8 @@ setCartItems((prev) =>
       });
     }
 
-      const totalAmount = subtotal;
+    const tax = 0;
+    const totalAmount = subtotal + tax;
 
     // Get user name
     const userDocRef = doc(db, "users", user.uid);
@@ -390,31 +385,14 @@ setCartItems((prev) =>
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
         {/* Header with same design as NotificationsScreen */}
-        {/* Header with same design as NotificationsScreen */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()}>
           <Pressable onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={26} color="#222" />
           </Pressable>
           <Text style={styles.title}>My Cart</Text>
         </View>
-
-        {/* Select All */}
-        {cartItems.length > 0 && (
-          <Pressable style={styles.selectAllButton} onPress={handleSelectAll}>
-            <Text style={styles.selectAllText}>{selectAll ? "Deselect All" : "Select All"}</Text>
-          </Pressable>
-        )}
-
-        {/* Bulk Delete */}
-        {cartItems.some((item) => item.checked) && (
-          <Pressable style={styles.bulkButton} onPress={handleBulkDelete}>
-            <Text style={styles.bulkButtonText}>Delete Selected</Text>
-          </Pressable>
-        )}
 
         {/* Select All */}
         {cartItems.length > 0 && (
@@ -458,12 +436,8 @@ setCartItems((prev) =>
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#1a6a37"]} />
           }
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#1a6a37"]} />
-          }
         />
 
-        {/* Checkout */}
         {/* Checkout */}
         <Animated.View style={[styles.checkoutBar, checkoutStyle]}>
           <Text style={styles.totalText}>
@@ -478,44 +452,18 @@ setCartItems((prev) =>
                 <Ionicons name="arrow-forward" size={18} color="#fff" />
               </>
             )}
-            {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.checkoutText}>Checkout</Text>
-                <Ionicons name="arrow-forward" size={18} color="#fff" />
-              </>
-            )}
           </Pressable>
         </Animated.View>
 
         {/* Purchase Modal */}
         <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
-        {/* Purchase Modal */}
-        <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
           <View style={styles.modalBackground}>
             <View style={styles.modalContainer}>
-              <Text style={styles.modalTitle}>Thank you for your purchase!</Text>
-              <Text style={styles.modalText}>Your next billing will be on:</Text>
               <Text style={styles.modalTitle}>Thank you for your purchase!</Text>
               <Text style={styles.modalText}>Your next billing will be on:</Text>
               <Text style={styles.modalDate}>{nextBillingDate}</Text>
               <Pressable style={styles.modalButton} onPress={() => setModalVisible(false)}>
-              <Pressable style={styles.modalButton} onPress={() => setModalVisible(false)}>
                 <Text style={styles.modalButtonText}>Close</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Warning Modal */}
-        <Modal visible={warningModalVisible} animationType="fade" transparent onRequestClose={() => setWarningModalVisible(false)}>
-          <View style={styles.modalBackground}>
-            <View style={styles.modalContainer}>
-              <Text style={styles.modalTitle}>No items selected!</Text>
-              <Text style={styles.modalText}>Please select at least one item to checkout.</Text>
-              <Pressable style={styles.modalButton} onPress={() => setWarningModalVisible(false)}>
-                <Text style={styles.modalButtonText}>OK</Text>
               </Pressable>
             </View>
           </View>
@@ -540,31 +488,6 @@ setCartItems((prev) =>
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff", paddingHorizontal: 16 },
-  header: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
-  title: { fontWeight: "700", color: "#222", fontSize: 20, marginLeft: 10 },
-
-  selectAllButton: {
-    backgroundColor: "#e6f5eb",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    marginLeft: 17,
-    alignSelf: "flex-start",
-  },
-  selectAllText: { color: "#1a6a37", fontWeight: "700", fontSize: 14 },
-
-  bulkButton: {
-    backgroundColor: "#ffe5e5",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    marginLeft: 17,
-    alignSelf: "flex-start",
-  },
-  bulkButtonText: { color: "#d11a2a", fontWeight: "700", fontSize: 14 },
-
   header: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
   title: { fontWeight: "700", color: "#222", fontSize: 20, marginLeft: 10 },
 
@@ -617,18 +540,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
   },
-  checkoutText: { fontSize: 15, fontWeight: "700", color: "#fff", marginRight: 6 },
-
-  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", marginTop: 100 },
-  emptyText: { marginTop: 12, fontSize: 18, fontWeight: "600", color: "#888" },
-
-  modalBackground: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
-  modalContainer: { backgroundColor: "#fff", padding: 24, borderRadius: 12, width: "80%", alignItems: "center" },
-  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12, textAlign: "center" },
-  modalText: { fontSize: 14, textAlign: "center", marginBottom: 8 },
-  modalDate: { fontSize: 16, fontWeight: "700", marginBottom: 16 },
-  modalButton: { backgroundColor: "#1a6a37", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
-  modalButtonText: { color: "#fff", fontWeight: "700", fontSize: 14 },
   checkoutText: { fontSize: 15, fontWeight: "700", color: "#fff", marginRight: 6 },
 
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", marginTop: 100 },
