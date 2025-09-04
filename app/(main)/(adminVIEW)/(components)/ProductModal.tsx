@@ -1,7 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
-import { addInventoryItem, InventoryItem, updateInventoryItem } from "functions/firebaseFunctions";
 import { Product } from "functions/types";
 import React, { useEffect, useState } from "react";
 import {
@@ -25,12 +23,12 @@ interface ProductModalProps {
   visible: boolean;
   product: Product | null;
   onSave: (
-    product: Omit<Product, "id" | "status" | "lastUpdated"> & {
-      imageUri?: string;
-    }
+    product: Omit<Product, "id" | "status" | "lastUpdated" | "createdAt">,
+    imageUri?: string
   ) => void;
   onClose: () => void;
 }
+
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const CATEGORIES = [
@@ -64,7 +62,7 @@ export default function ProductModal({
       setPrice(product.price.toString());
       setStock(product.stock.toString());
       setCategory(product.category || "");
-      setImageUri((product as any).imageUri || null);
+      setImageUri((product as any).imageUrl || null);
     } else {
       setName("");
       setPrice("");
@@ -111,87 +109,31 @@ export default function ProductModal({
     }
   };
 
-  const uploadImageToCloudinary = async (
-    uri: string
-  ): Promise<string | null> => {
-    try {
-      const formData = new FormData();
-      formData.append(
-        "file",
-        { uri, type: "image/jpeg", name: "product.jpg" } as any
-      );
-      formData.append("upload_preset", "shopnesty");
-
-      const response = await axios.post(
-        `https://api.cloudinary.com/v1_1/dagwspffq/image/upload`,
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
-      );
-      return response.data.secure_url;
-    } catch (err) {
-      console.error("Cloudinary upload error:", err);
-      Alert.alert(
-        "Upload Failed",
-        "Could not upload image. Please try again."
-      );
-      return null;
-    }
-  };
-
-  const handleSave = async () => {
+  const handleSave = () => {
   if (!validateForm()) return;
 
   setLoading(true);
 
   try {
-    // Upload image if there's a new local image
-    let uploadedImageUrl: string | undefined = undefined;
-    if (imageUri && (!product || imageUri !== (product as any).imageUrl)) {
-      const url = await uploadImageToCloudinary(imageUri);
-      if (!url) {
-        setLoading(false);
-        return; // stop if upload fails
-      }
-      uploadedImageUrl = url;
-    } else if (product) {
-      uploadedImageUrl = (product as any).imageUrl; // keep existing URL
-    }
-
-    const itemData: InventoryItem = {
+    const productData = {
       name,
       price: parseFloat(price),
-      quantity: parseInt(stock),
+      stock: parseInt(stock),
       category: category || "",
-      description: "", // default empty
-      sku: "", // default empty
-      lowStockThreshold: 5, // default threshold
-      supplier: {
-        name: "",
-        contact: "",
-      },
-      imageUrl: uploadedImageUrl,
+      lowStockThreshold: 5,
+      description: "",
     };
 
-    if (product) {
-      // Updating existing product
-      await updateInventoryItem(product.id, itemData);
-      Alert.alert("Success", `Product "${name}" updated successfully`);
-    } else {
-      // Adding new product
-      await addInventoryItem(itemData);
-      Alert.alert("Success", `Product "${name}" added successfully`);
-    }
-
+    onSave(productData, imageUri || undefined); // ✅ pass as second argument
     onClose();
   } catch (error) {
-    console.error("Error saving product:", error);
-    Alert.alert("Error", "Failed to save product. Please try again.");
+    console.error("Error preparing product:", error);
+    Alert.alert("Error", "Failed to prepare product. Please try again.");
   }
 
   setLoading(false);
 };
+
 
   return (
     <Modal

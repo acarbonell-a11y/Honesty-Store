@@ -52,7 +52,7 @@ export default function CartItemCard({
     onQtyChange(id, type);
   };
 
-  // 👇 swipe right action (delete)
+  // 👉 swipe right action (delete)
   const renderRightActions = () => (
     <Pressable style={styles.deleteButton} onPress={() => onDelete(id)}>
       <Ionicons name="trash-outline" size={24} color="#fff" />
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   qtyAdd: {
-    backgroundColor: "#000000ff",
+    backgroundColor: "#000000ff", // ✅ kept from version 1
   },
   qtyText: {
     fontSize: 15,

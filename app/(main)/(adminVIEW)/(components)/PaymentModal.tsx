@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { getInventoryItem, updateInventoryItem } from "functions/firebaseFunctions"; // Inventory functions
-import { AdminTransaction as Transaction, TransactionItemTypeDeduct } from "functions/types";
+import { AdminTransaction as Transaction } from "functions/types";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -67,40 +66,6 @@ export default function PaymentModal({
     return Object.keys(newErrors).length === 0;
   };
 
-  // Deduct stock for each item in the transaction
-  const deductStock = async () => {
-    if (!transaction?.items || transaction.items.length === 0) return;
-
-    try {
-      for (const item of transaction.items as (TransactionItemTypeDeduct & { stockDeducted?: boolean })[]) {
-        if (item.stockDeducted) continue;
-
-        const inventoryId: string =
-          typeof item.id === "string"
-            ? item.id
-            : item.id && typeof item.id.id === "string"
-            ? item.id.id
-            : "";
-
-        if (!inventoryId) {
-          console.warn("Skipping item with missing inventory reference:", item);
-          continue;
-        }
-
-        const inventoryItem = await getInventoryItem(inventoryId);
-        if (!inventoryItem) continue;
-
-        const newQuantity = inventoryItem.quantity - item.quantity;
-        if (newQuantity < 0) continue;
-
-        await updateInventoryItem(inventoryId, { quantity: newQuantity });
-        (item as any).stockDeducted = true;
-      }
-    } catch (error) {
-      console.error("Failed to deduct stock:", error);
-    }
-  };
-
   const handleUpdatePayment = () => {
   if (!validateForm()) return;
 
@@ -128,10 +93,6 @@ export default function PaymentModal({
           const wasUnpaid =
             transaction.paymentStatus === "Unpaid" || transaction.paymentStatus === "Pending";
           const willBePaidOrPartial = newStatus === "Paid" || newStatus === "Partially Paid";
-
-          if (wasUnpaid && willBePaidOrPartial) {
-            await deductStock();
-          }
 
           // ✅ Now pass changeAmount as well
           onUpdatePayment(transaction.id, newStatus, amount, selectedPaymentMethod, changeAmount);

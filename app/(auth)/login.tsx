@@ -1,6 +1,6 @@
 // ... your imports remain unchanged
 import { onLogin } from "@/functions/authFunctions";
-import useGoogleAuthAlpha from "@/functions/useGoogleAuth";
+import useGoogleAuth from "@/functions/useGoogleAuth";
 import { Link, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Button, Image, Pressable, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -26,15 +26,17 @@ export default function LoginScreen() {
   }
 };
 
-  //Google Sign-in Hook:
-  const { request, promptAsync, response } = useGoogleAuthAlpha();
+  // Google Sign-in Hook
+  const { request, promptAsync, response } = useGoogleAuth();
+
+  // Handle Google login response
   useEffect(() => {
-    if(response?.type === 'success')
-    {
-      console.log("Signed in, navigating to homepage...");
-      router.replace("/(main)/homepage");
+    if (response?.type === "success") {
+      // The hook already handles Firebase login and routing
+      console.log("✅ Google Sign-In successful");
+      // No extra navigation needed here
     }
-  },[response,router]);
+  }, [response]);
   
   return (
     <View className="flex-1 bg-dark px-6 justify-center">

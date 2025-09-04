@@ -51,6 +51,7 @@ export interface Product {
   lowStockThreshold?: number;
   lastUpdated?: Timestamp;
   createdAt?: Timestamp;
+  imageUrl?: string; // ✅ include in Product
 }
 
 // ---------- Config ----------
@@ -83,22 +84,23 @@ const Inventory: React.FC = () => {
       inventoryRef,
       (snapshot) => {
         const items: Product[] = snapshot.docs.map((d) => {
-  const data = d.data() as any;
-  const stock = typeof data.quantity === "number" ? data.quantity : 0;
+          const data = d.data() as any;
+          const stock = typeof data.quantity === "number" ? data.quantity : 0;
 
-  return {
-    id: d.id,
-    name: data.name ?? "Untitled",
-    price: typeof data.price === "number" ? data.price : 0,
-    stock,
-    category: data.category ?? undefined,
-    status: (data.status as Product["status"]) ?? computeStatus(stock, data.lowStockThreshold),
-    imageUrl: data.imageUrl ?? undefined, // ✅ read from Firestore
-    lastUpdated: data.lastUpdated as Timestamp | undefined,
-    createdAt: data.createdAt as Timestamp | undefined,
-  };
-});
-
+          return {
+            id: d.id,
+            name: data.name ?? "Untitled",
+            price: typeof data.price === "number" ? data.price : 0,
+            stock,
+            category: data.category ?? undefined,
+            status:
+              (data.status as Product["status"]) ??
+              computeStatus(stock, data.lowStockThreshold),
+            imageUrl: data.imageUrl ?? undefined, // ✅ read from Firestore
+            lastUpdated: data.lastUpdated as Timestamp | undefined,
+            createdAt: data.createdAt as Timestamp | undefined,
+          };
+        });
 
         setProducts(items);
         setLoading(false);
@@ -114,7 +116,11 @@ const Inventory: React.FC = () => {
 
   // ---------- Add / Update ----------
   const saveProduct = async (
-    productData: Omit<Product, "id" | "status" | "lastUpdated" | "createdAt">
+    productData: Omit<
+      Product,
+      "id" | "status" | "lastUpdated" | "createdAt"
+    >,
+    imageUri?: string // 👈 receive from ProductModal
   ) => {
     try {
       const { name, price, stock, category, lowStockThreshold } = productData;
@@ -135,20 +141,23 @@ const Inventory: React.FC = () => {
         if (lowStockThreshold !== undefined && lowStockThreshold !== null)
           updatedFields.lowStockThreshold = lowStockThreshold;
 
-        await updateInventoryItem(editingProduct.id, updatedFields);
+        // 🔹 future: updateInventoryItem(editingProduct.id, updatedFields, imageUri)
+        await updateInventoryItem(editingProduct.id, updatedFields,imageUri);
       } else {
-        await addInventoryItem({
-          name,
-          description: "",
-          price,
-          quantity: stock,
-          sku: "",
-          lowStockThreshold: lowStockThreshold ?? LOW_STOCK_FALLBACK,
-          supplier: { name: "", contact: "" },
-          status: nextStatus,
-          lastUpdated: serverTimestamp(),
-          createdAt: serverTimestamp(),
-        });
+        // --- Adding new product ---
+        await addInventoryItem(
+          {
+            name,
+            description: "",
+            price,
+            quantity: stock,
+            lowStockThreshold: lowStockThreshold ?? LOW_STOCK_FALLBACK,
+            status: nextStatus,
+            lastUpdated: serverTimestamp(),
+            createdAt: serverTimestamp(),
+          },
+          imageUri
+        );
       }
 
       closeModal();
@@ -158,49 +167,48 @@ const Inventory: React.FC = () => {
     }
   };
 
- // ---------- Delete ----------
-const deleteProduct = async (id: string) => {
-  try {
-    const ref = doc(db, "inventory", id);
+  // ---------- Delete ----------
+  const deleteProduct = async (id: string) => {
+    try {
+      const ref = doc(db, "inventory", id);
 
-    // 1️⃣ Fetch the product data before deleting
-    const snapshot = await getDoc(ref);
-    const productData = snapshot.data();
+      // 1️⃣ Fetch the product data before deleting
+      const snapshot = await getDoc(ref);
+      const productData = snapshot.data();
 
-    if (!productData) {
-      console.warn("Product not found for deletion");
-      return;
+      if (!productData) {
+        console.warn("Product not found for deletion");
+        return;
+      }
+
+      // 2️⃣ Delete the document
+      await deleteDoc(ref);
+
+      // 3️⃣ Create a notification
+      await createProductNotification(
+        ref.id, // productId
+        "Product Deleted", // title
+        `The product "${productData.name}" has been removed from the inventory.` // message
+      );
+
+      console.log(`Product "${productData.name}" deleted successfully.`);
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      Alert.alert("Error", "Could not delete the product. Please try again.");
     }
+  };
 
-    // 2️⃣ Delete the document
-    await deleteDoc(ref);
-
-    // 3️⃣ Create a notification
-    await createProductNotification(
-      ref.id, // productId
-      "Product Deleted", // title
-      `The product "${productData.name}" has been removed from the inventory.` // message
+  // ---------- Confirm Delete ----------
+  const confirmDelete = (id: string) => {
+    Alert.alert(
+      "Delete Product",
+      "Are you sure you want to delete this product?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => deleteProduct(id) },
+      ]
     );
-
-    console.log(`Product "${productData.name}" deleted successfully.`);
-  } catch (error) {
-    console.error("Error deleting product:", error);
-    Alert.alert("Error", "Could not delete the product. Please try again.");
-  }
-};
-
-// ---------- Confirm Delete ----------
-const confirmDelete = (id: string) => {
-  Alert.alert(
-    "Delete Product",
-    "Are you sure you want to delete this product?",
-    [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteProduct(id) },
-    ]
-  );
-};
-
+  };
 
   // ---------- Modal controls ----------
   const openAddModal = () => {
@@ -253,10 +261,11 @@ const confirmDelete = (id: string) => {
       <ProductItem
         product={item}
         onEdit={openEditModal}
-        onDelete={confirmDelete} 
+        onDelete={confirmDelete}
         onMore={function (id: string): void {
           throw new Error("Function not implemented.");
-        } }      />
+        }}
+      />
     ),
     []
   );
@@ -347,7 +356,7 @@ const confirmDelete = (id: string) => {
       <ProductModal
         visible={modalVisible}
         product={editingProduct}
-        onSave={saveProduct}
+        onSave={saveProduct} // ✅ passes imageUri through
         onClose={closeModal}
       />
     </GestureHandlerRootView>

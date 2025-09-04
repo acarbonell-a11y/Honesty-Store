@@ -4,6 +4,7 @@ import {
   addDoc,
   collection,
   doc,
+  DocumentReference,
   FieldValue,
   getDoc,
   getDocs,
@@ -45,35 +46,35 @@ export type InventoryItem = {
   description: string;
   price: number;
   quantity: number;
-  sku: string;
   lowStockThreshold: number ;
-  supplier: {
-    name: string;
-    contact: string;
-  };
   category?: string;
   status?: string;
   imageUrl?: string;
-  lastUpdated?: Timestamp | FieldValue;
-  createdAt?: Timestamp | FieldValue;
+  lastUpdated: Timestamp | FieldValue;
+  createdAt: Timestamp | FieldValue;
 };
 
 
 export type Transaction = {
-  transactionType: "sale" | "purchase";
-  totalAmount: number;
+  amountPaid: number;
+  customerName: string;
+  date: any;
+  dueDate: Date;
   items: {
     itemId: string;
+    name: string;
     quantity: number;
     priceAtTimeOfSale: number;
   }[];
-  userId: string;
-
-  // New fields for your Bill UI
+  notes: string;
+  paymentMethod: string;
+  paymentStatus: string;
   receiptNumber: string;
-  amountPaid: number;
-  date: any; // Firestore timestamp
-  paymentStatus: "Paid" | "Pending";
+  subtotal: number;
+  tax: number;
+  total: number;
+  userId: string;
+  userRef: DocumentReference;
 };
 
 /**
@@ -202,6 +203,7 @@ export const getInventory = async (): Promise<(InventoryItem & { id: string })[]
     return [];
   }
 };
+
 
 /**
  * TRANSACTION FUNCTIONS

@@ -12,7 +12,6 @@ WebBrowser.maybeCompleteAuthSession();
 
 export default function useGoogleAuth() {
   const router = useRouter();
-
   // pull IDs from app config (set in app.json -> extra.google)
   const {clientId, androidClientId, iosClientId } =
     (Constants.expoConfig?.extra as any)?.google ?? {};
@@ -61,7 +60,7 @@ export default function useGoogleAuth() {
 
             console.log("✅ Google login success:", user.email);
             if (isAdmin) {
-          router.replace("/dashboard"); // goes to (main)/(adminVIEW)/(admin)/dashboard.tsx
+          router.replace("/(main)/(adminVIEW)/(admin)/dashboard"); // goes to (main)/(adminVIEW)/(admin)/dashboard.tsx
           } else {
             router.replace("/(main)/(users)/(usersMain)/Homepage");
           }

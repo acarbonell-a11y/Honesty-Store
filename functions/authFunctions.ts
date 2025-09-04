@@ -1,7 +1,8 @@
 import { getUserProfile } from "@/services/userServices";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { Alert } from "react-native";
-import { auth } from "../config/firebaseConfig";
+import { auth, db } from "../config/firebaseConfig";
 import { handleSignUp } from "./firebaseFunctions";
 
 // Sign-up Function
@@ -58,5 +59,43 @@ export const logoutUser = async () => {
   } catch (error) {
     console.error("Logout failed:", error);
     throw error;
+  }
+};
+
+export const getCurrentUser = async () => {
+  const auth = getAuth();
+  const firebaseUser = auth.currentUser;
+
+  if (!firebaseUser) {
+    // No user is signed in
+    return null;
+  }
+
+  try {
+    // Get additional user info from Firestore, e.g., isAdmin
+    const userDocRef = doc(db, "users", firebaseUser.uid);
+    const userSnap = await getDoc(userDocRef);
+
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      return {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        isAdmin: userData.isAdmin || false, // default to false if not set
+        ...userData,
+      };
+    } else {
+      // If no Firestore doc exists, return basic info
+      return {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        isAdmin: false,
+      };
+    }
+  } catch (error) {
+    console.error("Error fetching current user:", error);
+    return null;
   }
 };

@@ -10,10 +10,11 @@ import {
   Pressable,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
 const SettingsScreen: React.FC = () => {
@@ -146,6 +147,14 @@ const SettingsScreen: React.FC = () => {
           >
             <Text style={styles.buttonText}>Update Username</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Theme Toggle */}
+        <View style={styles.themeRow}>
+          <Text style={[styles.label, { color: themeDark ? "#fff" : "#000" }]}>
+            Dark Theme
+          </Text>
+          <Switch value={themeDark} onValueChange={toggleTheme} />
         </View>
       </Animated.View>
     </View>

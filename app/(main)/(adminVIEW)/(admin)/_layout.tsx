@@ -1,9 +1,56 @@
 // app/(admin)/_layout.tsx
+import { getCurrentUser } from "@/functions/authFunctions";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
-import React from "react";
+import { Tabs, useFocusEffect, useRouter, useSegments } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, BackHandler, View } from "react-native";
 
 export default function AdminLayout() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true); // wait until we check auth
+  const segments = useSegments();
+  
+    // -------------------------------
+    // Block Android hardware back button
+    // -------------------------------
+    useFocusEffect(
+  React.useCallback(() => {
+    const onBackPress = () => {
+      // Only block back button on dashboard
+      const currentTab = segments[segments.length - 1]; // get the last segment
+      if (currentTab === "dashboard") {
+        return true; // block back
+      }
+      return false; // allow back for other tabs
+    };
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+    return () => subscription.remove();
+  }, [segments])
+);
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const user = await getCurrentUser(); // get the current logged-in user
+      if (!user || !user.isAdmin) {
+        // redirect non-admins or unauthenticated users to login
+        router.replace("/(auth)/login");
+      } else {
+        setLoading(false); // allow rendering of tabs
+      }
+    };
+    checkAdmin();
+  }, [router]);
+
+  // while checking auth, show a loading indicator
+  if (loading) {
+    return (
+      <View className="flex-1 justify-center items-center bg-white">
+        <ActivityIndicator size="large" color="#059038ff" />
+      </View>
+    );
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -64,6 +111,15 @@ export default function AdminLayout() {
           title: "Reports",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bar-chart-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="Settings"
+        options={{
+          title: "Settings",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
           ),
         }}
       />
