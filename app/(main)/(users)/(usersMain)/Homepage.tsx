@@ -26,7 +26,7 @@ import {
   onSnapshot,
   orderBy,
   query,
-  setDoc
+  setDoc,
 } from "firebase/firestore";
 
 interface Product {
@@ -124,22 +124,19 @@ const Homepage = () => {
     animateProducts();
   }, [selectedCategory]);
 
-  // Live cart count
+  // Live cart count for the "main" document only
   useEffect(() => {
     if (!userId) return;
-    const cartRef = collection(db, "users", userId, "cart");
-    const unsubscribe = onSnapshot(cartRef, (snapshot) => {
-      if (snapshot.empty) {
+    const cartDocRef = doc(db, "users", userId, "cart", "main");
+    const unsubscribe = onSnapshot(cartDocRef, (docSnap) => {
+      if (!docSnap.exists()) {
         setCartCount(0);
         return;
       }
-      let totalItems = 0;
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (Array.isArray(data.products)) {
-          totalItems += data.products.reduce((sum: number, p: any) => sum + p.quantity, 0);
-        }
-      });
+      const data = docSnap.data();
+      const totalItems = Array.isArray(data.products)
+        ? data.products.reduce((sum: number, p: any) => sum + p.quantity, 0)
+        : 0;
       setCartCount(totalItems);
     });
     return () => unsubscribe();
@@ -149,15 +146,18 @@ const Homepage = () => {
   useEffect(() => {
     if (!userId) return;
     const notifRef = collection(db, "notifications");
-    const unsubscribe = onSnapshot(query(notifRef, orderBy("createdAt", "desc")), (snapshot) => {
-      let count = 0;
-      snapshot.docs.forEach((docSnap) => {
-        const data = docSnap.data() as any;
-        const readBy: string[] = data.readBy || [];
-        if (!readBy.includes(userId)) count += 1;
-      });
-      setNotificationCount(count);
-    });
+    const unsubscribe = onSnapshot(
+      query(notifRef, orderBy("createdAt", "desc")),
+      (snapshot) => {
+        let count = 0;
+        snapshot.docs.forEach((docSnap) => {
+          const data = docSnap.data() as any;
+          const readBy: string[] = data.readBy || [];
+          if (!readBy.includes(userId)) count += 1;
+        });
+        setNotificationCount(count);
+      }
+    );
     return () => unsubscribe();
   }, [userId]);
 
@@ -166,50 +166,46 @@ const Homepage = () => {
     setTimeout(() => setRefreshingProducts(false), 500);
   };
 
-//Add to Cart Function:
-const addToCart = async (productId: string) => {
-  if (!userId) return;
+  // Add to Cart Function
+  const addToCart = async (productId: string) => {
+    if (!userId) return;
 
-  try {
-    const productRef = doc(db, "inventory", productId);
-    const productSnap = await getDoc(productRef);
-    if (!productSnap.exists()) return;
+    try {
+      const productRef = doc(db, "inventory", productId);
+      const productSnap = await getDoc(productRef);
+      if (!productSnap.exists()) return;
 
-    const productData = productSnap.data();
-    if (!productData.quantity || productData.quantity <= 0) return;
+      const productData = productSnap.data();
+      if (!productData.quantity || productData.quantity <= 0) return;
 
-    const cartDocRef = doc(db, "users", userId, "cart", "main");
-    const cartSnap = await getDoc(cartDocRef);
+      const cartDocRef = doc(db, "users", userId, "cart", "main");
+      const cartSnap = await getDoc(cartDocRef);
 
-    // --- Update Cart ---
-    let currentProducts: { productId: string; quantity: number }[] = [];
-    if (cartSnap.exists()) {
-      currentProducts = cartSnap.data().products || [];
-      const existingIndex = currentProducts.findIndex((p) => p.productId === productId);
-      if (existingIndex !== -1) {
-        currentProducts[existingIndex].quantity += 1;
+      let currentProducts: { productId: string; quantity: number }[] = [];
+      if (cartSnap.exists()) {
+        currentProducts = cartSnap.data().products || [];
+        const existingIndex = currentProducts.findIndex((p) => p.productId === productId);
+        if (existingIndex !== -1) {
+          currentProducts[existingIndex].quantity += 1;
+        } else {
+          currentProducts.push({ productId, quantity: 1 });
+        }
       } else {
         currentProducts.push({ productId, quantity: 1 });
       }
-    } else {
-      currentProducts.push({ productId, quantity: 1 });
+
+      await setDoc(cartDocRef, { products: currentProducts }, { merge: true });
+
+      // Reduce inventory
+      await setDoc(
+        productRef,
+        { quantity: productData.quantity - 1 },
+        { merge: true }
+      );
+    } catch (error) {
+      console.error("Error adding to cart:", error);
     }
-
-    await setDoc(cartDocRef, { products: currentProducts }, { merge: true });
-
-    // --- Reduce Inventory ---
-    await setDoc(
-      productRef,
-      { quantity: productData.quantity - 1 },
-      { merge: true } // merges with other fields without overwriting
-    );
-
-    console.log("Added to cart and reduced inventory successfully");
-  } catch (error) {
-    console.error("Error adding to cart:", error);
-  }
-};
-
+  };
 
   const filteredProducts = products.filter(
     (p) =>
@@ -330,7 +326,11 @@ const addToCart = async (productId: string) => {
         style={{
           flex: 1,
           opacity: productAnim,
-          transform: [{ translateY: productAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }],
+          transform: [
+            {
+              translateY: productAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }),
+            },
+          ],
           paddingHorizontal: 17,
           marginTop: 10,
         }}
@@ -369,7 +369,13 @@ const addToCart = async (productId: string) => {
               />
             </View>
           )}
-          refreshControl={<RefreshControl refreshing={refreshingProducts} onRefresh={onRefreshProducts} colors={["#1a6a37"]} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshingProducts}
+              onRefresh={onRefreshProducts}
+              colors={["#1a6a37"]}
+            />
+          }
         />
       </Animated.View>
     </View>

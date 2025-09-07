@@ -111,7 +111,7 @@ const SettingsScreen: React.FC = () => {
         </Text>
 
         <Pressable onPress={handleLogout} style={styles.iconWrapper}>
-          <Ionicons name="log-out-outline" size={28} color="#dc3545" />
+          <Ionicons name="log-out-outline" size={28} color="#000" />
         </Pressable>
       </View>
 

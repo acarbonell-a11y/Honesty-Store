@@ -6,6 +6,7 @@ import { doc, updateDoc } from "firebase/firestore";
 import { getUserProfileFireBase, getUserTransactions, uploadImageToCloudinary } from "functions/firebaseFunctions";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   FlatList,
@@ -38,73 +39,68 @@ const ProfileScreen = () => {
     "https://via.placeholder.com/150?text=User"
   );
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [loadingProfile, setLoadingProfile] = useState<boolean>(false); // <-- loading
 
-  // Animated values for list items
   const listAnimValues = useRef<Animated.Value[]>([]).current;
 
-  // Fetch user profile + transactions
   const fetchUserData = async () => {
-  try {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
 
-    const profile = await getUserProfileFireBase(uid);
-    if (profile) {
-  setUserData({ name: profile.name, email: profile.email });
-  if (profile.profileImage) setProfileImage(profile.profileImage); // ✅ show uploaded image
-}
-
-
-    const userTransactions = await getUserTransactions(uid);
-    const mappedTransactions: Transaction[] = userTransactions.map((tx: any) => ({
-      id: tx.id,
-      title: tx.items?.[0]?.name || "Transaction",
-      amount: Number(tx.total || 0),
-      status: tx.paymentStatus === "Paid" ? "Paid" : "Unpaid",
-      time: tx.date?.toDate
-        ? tx.date.toDate().toISOString() // keep sortable
-        : new Date().toISOString(),
-    }));
-
-    // ✅ Sort: unpaid first, then paid. Within each, latest date first.
-    mappedTransactions.sort((a, b) => {
-      if (a.status === b.status) {
-        return new Date(b.time).getTime() - new Date(a.time).getTime();
+      const profile = await getUserProfileFireBase(uid);
+      if (profile) {
+        setUserData({ name: profile.name, email: profile.email });
+        if (profile.profileImage) setProfileImage(profile.profileImage);
       }
-      return a.status === "Unpaid" ? -1 : 1;
-    });
 
-    setTransactions(
-      mappedTransactions.map((t) => ({
-        ...t,
-        time: new Date(t.time).toLocaleDateString(), // format back for UI
-      }))
-    );
+      const userTransactions = await getUserTransactions(uid);
+      const mappedTransactions: Transaction[] = userTransactions.map((tx: any) => ({
+        id: tx.id,
+        title: tx.items?.[0]?.name || "Transaction",
+        amount: Number(tx.total || 0),
+        status: tx.paymentStatus === "Paid" ? "Paid" : "Unpaid",
+        time: tx.date?.toDate
+          ? tx.date.toDate().toISOString()
+          : new Date().toISOString(),
+      }));
 
-    const unpaid = mappedTransactions
-      .filter((t) => t.status === "Unpaid")
-      .reduce((sum, t) => sum + t.amount, 0);
-    setBalanceToPay(unpaid);
+      mappedTransactions.sort((a, b) => {
+        if (a.status === b.status) {
+          return new Date(b.time).getTime() - new Date(a.time).getTime();
+        }
+        return a.status === "Unpaid" ? -1 : 1;
+      });
 
-    // Prepare animations
-    listAnimValues.splice(0, listAnimValues.length); // reset
-    mappedTransactions.forEach(() => listAnimValues.push(new Animated.Value(0)));
+      setTransactions(
+        mappedTransactions.map((t) => ({
+          ...t,
+          time: new Date(t.time).toLocaleDateString(),
+        }))
+      );
 
-    Animated.stagger(
-      120,
-      listAnimValues.map((anim) =>
-        Animated.timing(anim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        })
-      )
-    ).start();
-  } catch (error) {
-    console.error("Error fetching user data:", error);
-  }
-};
+      const unpaid = mappedTransactions
+        .filter((t) => t.status === "Unpaid")
+        .reduce((sum, t) => sum + t.amount, 0);
+      setBalanceToPay(unpaid);
 
+      listAnimValues.splice(0, listAnimValues.length);
+      mappedTransactions.forEach(() => listAnimValues.push(new Animated.Value(0)));
+
+      Animated.stagger(
+        120,
+        listAnimValues.map((anim) =>
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          })
+        )
+      ).start();
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    }
+  };
 
   useEffect(() => {
     fetchUserData();
@@ -116,7 +112,6 @@ const ProfileScreen = () => {
     setRefreshing(false);
   }, []);
 
-  // Animation helpers
   const handlePressIn = (scale: Animated.Value) => {
     Animated.spring(scale, { toValue: 0.9, useNativeDriver: true }).start();
   };
@@ -125,73 +120,62 @@ const ProfileScreen = () => {
     Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
   };
 
-  // Pick image from gallery
-const pickFromGallery = async () => {
-  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (status !== "granted") {
-    Alert.alert("Permission Denied", "We need camera roll permissions.");
-    return;
-  }
-
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsEditing: true,
-    aspect: [1, 1],
-    quality: 0.7,
-  });
-
-  if (!result.canceled) {
-    const uri = result.assets[0].uri;
-
-    // Upload to Cloudinary
-    const uploadedUrl = await uploadImageToCloudinary(uri);
-    if (uploadedUrl) {
-      setProfileImage(uploadedUrl);
-
-      // Save to Firestore
-      const uid = auth.currentUser?.uid;
-      if (uid) {
-        await updateDoc(doc(db, "users", uid), { profileImage: uploadedUrl });
+  const updateProfileImage = async (uri: string) => {
+    setLoadingProfile(true);
+    try {
+      const uploadedUrl = await uploadImageToCloudinary(uri);
+      if (uploadedUrl) {
+        setProfileImage(uploadedUrl);
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+          await updateDoc(doc(db, "users", uid), { profileImage: uploadedUrl });
+        }
       }
+    } catch (err) {
+      Alert.alert("Error", "Failed to update profile image.");
     }
-  }
+    setLoadingProfile(false);
+    setModalVisible(false);
+  };
 
-  setModalVisible(false);
-};
-
-// Take photo with camera
-const takePhoto = async () => {
-  const { status } = await ImagePicker.requestCameraPermissionsAsync();
-  if (status !== "granted") {
-    Alert.alert("Permission Denied", "We need camera permissions.");
-    return;
-  }
-
-  const result = await ImagePicker.launchCameraAsync({
-    allowsEditing: true,
-    aspect: [1, 1],
-    quality: 0.7,
-  });
-
-  if (!result.canceled) {
-    const uri = result.assets[0].uri;
-
-    // Upload to Cloudinary
-    const uploadedUrl = await uploadImageToCloudinary(uri);
-    if (uploadedUrl) {
-      setProfileImage(uploadedUrl);
-
-      // Save to Firestore
-      const uid = auth.currentUser?.uid;
-      if (uid) {
-        await updateDoc(doc(db, "users", uid), { profileImage: uploadedUrl });
-      }
+  const pickFromGallery = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Denied", "We need camera roll permissions.");
+      return;
     }
-  }
 
-  setModalVisible(false);
-};
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
 
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      updateProfileImage(uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Denied", "We need camera permissions.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      updateProfileImage(uri);
+    }
+  };
 
   const renderIcon = (
     iconName: React.ComponentProps<typeof Ionicons>["name"],
@@ -255,7 +239,6 @@ const takePhoto = async () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Profile</Text>
         {renderIcon("settings-outline", scaleRight, () =>
@@ -263,7 +246,6 @@ const takePhoto = async () => {
         )}
       </View>
 
-      {/* Profile Section */}
       <View style={styles.profileSection}>
         <Pressable
           style={styles.avatarContainer}
@@ -273,16 +255,20 @@ const takePhoto = async () => {
           }}
           onPressOut={() => handlePressOut(scaleProfile)}
         >
-          <Animated.Image
-            source={{ uri: profileImage }}
-            style={[styles.avatar, { transform: [{ scale: scaleProfile }] }]}
-          />
+          {loadingProfile ? (
+            <ActivityIndicator size="large" color="#1a6a37" />
+          ) : (
+            <Animated.Image
+              source={{ uri: profileImage }}
+              style={[styles.avatar, { transform: [{ scale: scaleProfile }] }]}
+            />
+          )}
         </Pressable>
         <Text style={styles.name}>{userData?.name || "Loading..."}</Text>
         <Text style={styles.email}>{userData?.email || ""}</Text>
       </View>
 
-      {/* Balance */}
+      {/* Balance Card */}
       <View style={styles.balanceCard}>
         <Ionicons name="wallet-outline" size={32} color="#1a6a37" />
         <View style={{ marginLeft: 12 }}>
@@ -329,6 +315,9 @@ const takePhoto = async () => {
     </View>
   );
 };
+
+// Styles remain unchanged from your original code
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff", paddingHorizontal: 17, paddingTop: 45 },

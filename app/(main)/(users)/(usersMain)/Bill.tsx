@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import BillCard, { BillStatus } from "app/(main)/(users)/(userComponent)/BillCard";
 import SearchBar from "app/(main)/(users)/(userComponent)/SearchBar";
@@ -36,12 +35,10 @@ const BillsPage = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Gcash" | null>(null);
-  const [notificationCount, setNotificationCount] = useState(0);
 
   const router = useRouter();
   const scalePay = useRef(new Animated.Value(1)).current;
   const scaleConfirm = useRef(new Animated.Value(0)).current;
-  const scaleNotification = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<FlatList<Bill>>(null);
   const GCashNumber = "09959483927";
 
@@ -94,15 +91,17 @@ const BillsPage = () => {
 
   const summary = useMemo(() => {
     let totalDue = 0;
-    let totalCurrent = 0;
+    let pendingCount = 0;
 
     bills.forEach((bill) => {
       const amount = parseFloat(bill.amount);
-      if (bill.status === "Paid") totalCurrent += amount;
-      else totalDue += amount;
+      if (bill.status === "Pending") {
+        totalDue += amount;
+        pendingCount += 1;
+      }
     });
 
-    return { totalDue, totalCurrent };
+    return { totalDue, pendingCount };
   }, [bills]);
 
   const handlePressIn = (scale: Animated.Value) => {
@@ -136,29 +135,6 @@ const BillsPage = () => {
     );
   };
 
-  const renderIcon = (
-    iconName: React.ComponentProps<typeof Ionicons>["name"],
-    badgeCount: number,
-    scale: Animated.Value,
-    onPress?: () => void
-  ) => (
-    <Pressable
-      onPress={onPress}
-      onPressIn={() => handlePressIn(scale)}
-      onPressOut={() => handlePressOut(scale)}
-      style={{ marginLeft: 15 }}
-    >
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <Ionicons name={iconName} size={28} color="#fff" />
-        {badgeCount > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{badgeCount > 99 ? "99+" : badgeCount}</Text>
-          </View>
-        )}
-      </Animated.View>
-    </Pressable>
-  );
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a6a37" />
@@ -167,12 +143,6 @@ const BillsPage = () => {
       <View style={styles.headerBackground}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>My Bills</Text>
-          {renderIcon(
-            "notifications-outline",
-            notificationCount,
-            scaleNotification,
-            () => router.push("/(main)/(users)/(userHidComps)/NotifacationScreen")
-          )}
         </View>
 
         {/* Summary Card */}
@@ -183,11 +153,15 @@ const BillsPage = () => {
             {summary.totalDue > 0 && (
               <Pressable
                 style={styles.payButton}
-                onPress={() => openPaymentModal({ billNumber: "Total Due", amount: summary.totalDue.toString() })}
+                onPress={() =>
+                  openPaymentModal({ billNumber: "Total Due", amount: summary.totalDue.toString() })
+                }
                 onPressIn={() => handlePressIn(scalePay)}
                 onPressOut={() => handlePressOut(scalePay)}
               >
-                <Animated.Text style={{ color: "#fff", fontWeight: "700", transform: [{ scale: scalePay }] }}>
+                <Animated.Text
+                  style={{ color: "#fff", fontWeight: "700", transform: [{ scale: scalePay }] }}
+                >
                   Pay Now
                 </Animated.Text>
               </Pressable>
@@ -197,8 +171,8 @@ const BillsPage = () => {
           <View style={styles.divider} />
 
           <View style={styles.summarySection}>
-            <Text style={styles.summaryLabel}>Current Paid</Text>
-            <Text style={[styles.summaryValue, { color: "#1a6a37" }]}>₱{summary.totalCurrent.toFixed(2)}</Text>
+            <Text style={styles.summaryLabel}>Pending Bills</Text>
+            <Text style={[styles.summaryValue, { color: "#1a6a37" }]}>{summary.pendingCount} bill(s)</Text>
           </View>
         </View>
 
@@ -287,19 +261,6 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   headerTitle: { color: "#fff", fontSize: 28, fontWeight: "800" },
-  badge: {
-    position: "absolute",
-    top: -6,
-    right: -10,
-    backgroundColor: "white",
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-  },
-  badgeText: { color: "#1a6a37", fontSize: 10, fontWeight: "bold" },
   summaryCard: {
     flexDirection: "row",
     backgroundColor: "#fff",
@@ -343,3 +304,4 @@ const styles = StyleSheet.create({
 });
 
 export default BillsPage;
+ 

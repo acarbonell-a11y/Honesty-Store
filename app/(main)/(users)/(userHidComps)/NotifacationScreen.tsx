@@ -249,6 +249,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
+    marginHorizontal: 20
   },
   title: { fontWeight: "700", color: "#222", fontSize: 20, marginLeft: 10 },
   dateStamp: {
